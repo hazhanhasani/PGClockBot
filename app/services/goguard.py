@@ -7,6 +7,7 @@ This adapter normalizes the supported API surface to the common shape used by
 PGClockBot. Unsupported mutations fail explicitly instead of pretending they worked.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -124,9 +125,10 @@ def _normalize_subscription(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_admin(raw: dict[str, Any]) -> dict[str, Any]:
-    """Map GoGuard owner/seller metadata to fields consumed by PGClockBot."""
+    """Map GoGuard owner/seller metadata without discarding native role fields."""
     admin = dict(raw)
     role_raw = raw.get("role")
+    role_data = dict(role_raw) if isinstance(role_raw, dict) else {}
     if isinstance(role_raw, dict):
         role_name = str(role_raw.get("name") or role_raw.get("role") or "").strip().lower()
     else:
@@ -141,6 +143,30 @@ def _normalize_admin(raw: dict[str, Any]) -> dict[str, Any]:
         limits["max_users"] = user_limit
     if usage_limit is not None:
         limits["data_limit"] = usage_limit
+
+    permissions = role_data.get("permissions")
+    if isinstance(permissions, str):
+        try:
+            permissions = json.loads(permissions)
+        except (TypeError, ValueError):
+            permissions = None
+    if not isinstance(permissions, dict):
+        permissions = raw.get("permissions")
+        if isinstance(permissions, str):
+            try:
+                permissions = json.loads(permissions)
+            except (TypeError, ValueError):
+                permissions = None
+    role_data.update(
+        {
+            "name": role_name or "seller",
+            "is_owner": is_owner,
+            "permissions": permissions if isinstance(permissions, dict) else {},
+        }
+    )
+    if not isinstance(role_data.get("limits"), dict):
+        role_data["limits"] = limits
+
     admin.update(
         {
             "role_name": role_name or "seller",
@@ -151,13 +177,9 @@ def _normalize_admin(raw: dict[str, Any]) -> dict[str, Any]:
             "total_users": total_users,
             "data_limit": usage_limit,
             "used_traffic": total_usage,
-            "role": {
-                "id": 1 if is_owner else 2,
-                "name": role_name or "seller",
-                "is_owner": is_owner,
-                "permissions": {},
-                "limits": limits,
-            },
+            "role": role_data,
+            "role_id": raw.get("role_id") or role_data.get("id"),
+            "pg_role_id": raw.get("pg_role_id") or role_data.get("id"),
         }
     )
     return admin
@@ -562,6 +584,13 @@ class GoGuardClient(PasarGuardClient):
 
     async def get_admin_roles(self) -> list[dict]:
         return []
+
+    async def get_admin_role(self, role_id: int) -> dict:
+        current = await self.get_current_admin()
+        role = current.get("role") if isinstance(current, dict) else None
+        if isinstance(role, dict) and _as_int(role.get("id")) == int(role_id):
+            return role
+        raise PasarGuardError("GoGuard API فهرست نقش‌های قابل مدیریت را ارائه نمی‌کند", 405)
 
     async def create_admin(self, payload: dict) -> dict:
         raise PasarGuardError("ساخت ادمین از طریق GoGuard API پشتیبانی نمی‌شود", 405)
