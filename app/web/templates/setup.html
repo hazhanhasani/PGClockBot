@@ -139,11 +139,11 @@
       </div>
       <div data-panel-provider-fields="goguard" hidden>
         <label>آدرس API پنل SolidLayer / GoGuard
-          <input name="goguard_base_url" value="{{ values.GOGUARD_BASE_URL or '' }}" dir="ltr" placeholder="https://app.solidlayerco.com" autocomplete="off" />
+          <input name="goguard_base_url" value="{{ values.GOGUARD_BASE_URL or '' }}" dir="ltr" placeholder="https://app.solidlayerco.com" autocomplete="off" required />
           <small class="muted">ریشه API را وارد کنید؛ نه آدرس مستندات <code dir="ltr">/docs/index.html</code>.</small>
         </label>
         <label>نام کاربری GoGuard
-          <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" />
+          <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" required />
         </label>
         <label>رمز عبور GoGuard
           <input name="goguard_password" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_goguard_password else '' }}" {{ 'required' if not has_goguard_password else '' }} />
