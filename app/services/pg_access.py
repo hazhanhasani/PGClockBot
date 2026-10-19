@@ -711,7 +711,7 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         if k in PG_FEATURE_LABELS
     ]
     limits_rows: list[dict[str, str]] = []
-    if pg_is_owner:
+    if pg_is_owner and provider != "goguard":
         limits_rows.append({"label": "سقف نقش", "value": "بدون محدودیت (مالک پاسارگارد)"})
     else:
         merged = merge_role_limits(admin, role)
@@ -759,7 +759,9 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         "username": username,
         "role_name": role_name,
         "account_label": (
-            "مالک کامل پاسارگارد" if pg_is_owner else "حساب محدود پاسارگارد"
+            ("مالک SolidLayer / GoGuard" if caps.get("goguard_is_owner") else "ادمین SolidLayer / GoGuard")
+            if provider == "goguard"
+            else ("مالک کامل پاسارگارد" if pg_is_owner else "حساب محدود پاسارگارد")
         ),
         "features": features,
         "can_create_admin": can_create,
