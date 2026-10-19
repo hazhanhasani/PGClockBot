@@ -32,6 +32,9 @@ jobs:
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
 
+      - name: Test SolidLayer GoGuard adapter
+        run: python -m pytest tests/test_goguard_client.py -q -p no:cacheprovider
+
   # The installer runs the panel on Python 3.10–3.12: newer-only code must not ship.
   oldest-python:
     runs-on: ubuntu-latest
