@@ -80,8 +80,8 @@ def merge_role_limits(admin: dict | None, role: dict | None) -> dict[str, Any]:
     return limits
 
 
-_DATA_LIMIT_KEYS = ("data_limit", "max_traffic", "traffic_limit")
-_USER_LIMIT_KEYS = ("max_users", "users_max")
+_DATA_LIMIT_KEYS = ("data_limit", "max_traffic", "traffic_limit", "usage_limit")
+_USER_LIMIT_KEYS = ("max_users", "users_max", "user_limit")
 
 
 def _first_positive(source: dict[str, Any] | None, keys: tuple[str, ...]) -> int:
