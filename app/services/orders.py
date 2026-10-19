@@ -657,8 +657,13 @@ async def create_custom_order(
         price_per_gb=price_per_gb,
         price_per_day=price_per_day,
     )
+    from app.config import get_settings
+
+    is_goguard = get_settings().panel_provider == "goguard"
     tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+    if is_goguard:
+        tpl_id = None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
     name_prefix = (ui.get("custom_plan_username_prefix") or "").strip() or None
     name_suffix = (ui.get("custom_plan_username_suffix") or "").strip() or None
@@ -687,13 +692,18 @@ async def create_custom_order(
         tpl_raw = own_map.get("custom_plan_template_id") or ""
         group_ids = own_map.get("custom_plan_group_ids") or None
         tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+        if is_goguard:
+            tpl_id = None
         name_prefix = own_map.get("custom_plan_username_prefix") or None
         name_suffix = own_map.get("custom_plan_username_suffix") or None
         name_pattern = own_map.get("custom_plan_username_pattern") or None
-        if not tpl_id and not group_ids:
+        if not is_goguard and not tpl_id and not group_ids:
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+
+    if is_goguard and not group_ids:
+        raise ValueError("برای پلن دلخواه در GoGuard، حداقل یک سرویس GoGuard را در تنظیمات فروشگاه انتخاب کنید")
 
     plan = Plan(
         name="پلن دلخواه",
