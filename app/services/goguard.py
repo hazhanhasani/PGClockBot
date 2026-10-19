@@ -157,11 +157,24 @@ def _normalize_admin(raw: dict[str, Any]) -> dict[str, Any]:
                 permissions = json.loads(permissions)
             except (TypeError, ValueError):
                 permissions = None
+    if not isinstance(permissions, dict) or not permissions:
+        # GoGuard remains the final authorization boundary. This fallback keeps
+        # subscription operations available when the current-admin response omits
+        # detailed permissions for the current role.
+        permissions = {
+            "system": {"read": True},
+            "users": {
+                "read": True, "read_simple": True, "create": True,
+                "update": True, "delete": True, "reset_usage": True,
+                "revoke_sub": True,
+            },
+            "groups": {"read": True, "read_simple": True},
+        }
     role_data.update(
         {
             "name": role_name or "seller",
             "is_owner": is_owner,
-            "permissions": permissions if isinstance(permissions, dict) else {},
+            "permissions": permissions,
         }
     )
     if not isinstance(role_data.get("limits"), dict):
@@ -316,7 +329,7 @@ class GoGuardClient(PasarGuardClient):
         if not isinstance(token, str) or not token.strip():
             raise PasarGuardError("پاسخ ورود GoGuard فاقد توکن است", body=data)
         self._token = token.strip()
-        self._login_password = None
+        # Keep the password in memory so a 401 can trigger a fresh login.
         self._api_base_resolved = True
         logger.info("GoGuard login succeeded · base=%s", self.base_url)
         return self._token
