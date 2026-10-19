@@ -277,7 +277,7 @@
       {% endif %}
       <label class="form-field">نام کاربری
         <input id="pg-edit-username" type="text" readonly disabled dir="ltr" />
-        <small class="muted">در پاسارگارد امکان تغییر نام کاربری وجود ندارد</small>
+        <small class="muted">{% if is_goguard %}شناسه اشتراک برای ویرایش از این فرم ثابت نگه داشته می‌شود.{% else %}در پاسارگارد امکان تغییر نام کاربری وجود ندارد{% endif %}</small>
       </label>
       <div class="form-row">
         <label class="form-field">حجم (گیگابایت)
@@ -296,7 +296,7 @@
       </label>
       {% endif %}
       <div class="form-field">
-        <span class="form-field-label">گروه‌ها (حداقل یکی)</span>
+        <span class="form-field-label">{% if is_goguard %}سرویس‌های GoGuard (حداقل یکی){% else %}گروه‌ها (حداقل یکی){% endif %}</span>
         <div class="ui-switch-grid" id="pg-edit-groups">
           {% for g in groups %}
           {{ switch_chip('edit_group_' ~ g.get('id'), g.get('name') or g.get('id'), value=g.get('id')) }}
