@@ -627,6 +627,10 @@ def staff_needs_quota_check(staff: dict) -> bool:
     non-Hybrid single-owner deployment) still defaults to sudo, preserving
     prior behavior for the common case.
     """
+    # GoGuard owners have global subscription scope but their explicit
+    # user/traffic limits still apply through the GoGuard API.
+    if staff.get("pg_provider") == "goguard":
+        return True
     if staff.get("role") != "admin":
         return True
     return staff.get("pg_is_owner") is False
