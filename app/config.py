@@ -117,6 +117,13 @@ class Settings(BaseSettings):
     # Admin API key for the connected PG identity (X-Api-Key). Preferred over password.
     pg_api_key: str = Field(default="", alias="PG_API_KEY")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")
+
+    # Keep provider credentials separate so switching adapters never overwrites either panel.
+    panel_provider: str = Field(default="pasarguard", alias="PANEL_PROVIDER")
+    goguard_base_url: str = Field(default="", alias="GOGUARD_BASE_URL")
+    goguard_username: str = Field(default="", alias="GOGUARD_USERNAME")
+    goguard_password: str = Field(default="", alias="GOGUARD_PASSWORD")
+
     connection_monitor_xray_path: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_PATH")
     connection_monitor_xray_sha256: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_SHA256")
 
@@ -166,6 +173,10 @@ class Settings(BaseSettings):
         "pg_password",
         "pg_api_key",
         "pg_access_token",
+        "panel_provider",
+        "goguard_base_url",
+        "goguard_username",
+        "goguard_password",
         "web_host",
         "web_secret",
         "web_admin_user",
@@ -219,6 +230,21 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_sub_path(cls, value: str) -> str:
         return normalize_pg_subscription_path(value)
+
+    @field_validator("panel_provider", mode="after")
+    @classmethod
+    def normalize_panel_provider(cls, value: str) -> str:
+        provider = (value or "").strip().lower().replace("-", "").replace("_", "")
+        if provider in {"", "pasarguard", "pasarguardpanel"}:
+            return "pasarguard"
+        if provider in {"goguard", "solidlayer", "solidlayergoguard"}:
+            return "goguard"
+        raise ValueError("PANEL_PROVIDER must be pasarguard or goguard")
+
+    @field_validator("goguard_base_url", mode="after")
+    @classmethod
+    def normalize_goguard_url(cls, value: str) -> str:
+        return normalize_pg_base_url(value) or value
 
     def _miniapp_https_base(self) -> str:
         """Canonical HTTPS origin for Telegram WebApp buttons.
