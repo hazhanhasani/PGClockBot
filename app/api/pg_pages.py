@@ -664,6 +664,7 @@ def register_pg_pages(
     ):
         import time
 
+        from app.config import get_settings
         from app.services.pasarguard import parse_group_ids
         from app.services.plans_catalog import (
             groups_allowed_for_staff,
@@ -681,13 +682,21 @@ def register_pg_pages(
             return _pg_form_err("نام کاربری الزامی است", modal="create")
 
         access = staff.get("pg_access") or {}
+        is_goguard = get_settings().panel_provider == "goguard"
         require_template = bool(access.get("require_template")) and not _is_pg_owner_principal(staff)
+        if is_goguard and require_template:
+            return _pg_form_err(
+                "GoGuard API از قالب‌های PasarGuard پشتیبانی نمی‌کند؛ مدیر پنل باید سیاست اجبار قالب را تغییر دهد.",
+                modal="create",
+            )
         mode = str(form.get("mode") or "").strip().lower()
         if require_template:
             mode = "template"
         if mode not in {"template", "custom"}:
             # Back-compat: old forms only sent template_id
             mode = "template" if str(form.get("template_id") or "").strip() else "custom"
+        if is_goguard:
+            mode = "custom"
 
         note = f"web panel · {staff.get('username') or 'staff'}"
         import re
@@ -744,6 +753,8 @@ def register_pg_pages(
                 gb_raw = str(form.get("data_limit_gb") or "").strip()
                 days_raw = str(form.get("duration_days") or "").strip()
                 hwid_raw = str(form.get("hwid_limit") or "").strip()
+                if is_goguard and hwid_raw:
+                    return _pg_form_err("GoGuard API از محدودیت تعداد دستگاه (HWID) پشتیبانی نمی‌کند", modal="create")
                 data_limit = None
                 expire_ts = None
                 hwid_limit = None
