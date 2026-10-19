@@ -29,6 +29,10 @@ WIZARD_ENV_KEYS = (
     "PG_USERNAME",
     "PG_PASSWORD",
     "PG_API_KEY",
+    "PANEL_PROVIDER",
+    "GOGUARD_BASE_URL",
+    "GOGUARD_USERNAME",
+    "GOGUARD_PASSWORD",
     "WEB_HOST",
     "WEB_PORT",
     "WEB_SECRET",
@@ -290,6 +294,10 @@ def _env_get(key: str) -> str:
             "PG_USERNAME": settings.pg_username,
             "PG_PASSWORD": settings.pg_password,
             "PG_API_KEY": settings.pg_api_key,
+            "PANEL_PROVIDER": settings.panel_provider,
+            "GOGUARD_BASE_URL": settings.goguard_base_url,
+            "GOGUARD_USERNAME": settings.goguard_username,
+            "GOGUARD_PASSWORD": settings.goguard_password,
             "WEB_HOST": settings.web_host,
             "WEB_PORT": str(settings.web_port),
             "WEB_SECRET": settings.web_secret,
@@ -594,6 +602,10 @@ def current_setup_values() -> dict[str, str]:
         "PG_USERNAME": _env_get("PG_USERNAME"),
         "PG_PASSWORD": _env_get("PG_PASSWORD"),
         "PG_API_KEY": _env_get("PG_API_KEY"),
+        "PANEL_PROVIDER": _env_get("PANEL_PROVIDER") or "pasarguard",
+        "GOGUARD_BASE_URL": _env_get("GOGUARD_BASE_URL"),
+        "GOGUARD_USERNAME": _env_get("GOGUARD_USERNAME"),
+        "GOGUARD_PASSWORD": _env_get("GOGUARD_PASSWORD"),
         "WEB_PORT": _env_get("WEB_PORT") or "9000",
         "PUBLIC_BASE_URL": _env_get("PUBLIC_BASE_URL"),
         "CURRENCY": _env_get("CURRENCY") or "تومان",
@@ -755,6 +767,66 @@ async def setup_pg_access_audit() -> dict[str, Any]:
     from app.services.pg_access import public_pg_access_audit, resolve_platform_pg_capabilities
 
     values = current_setup_values()
+
+    provider = (values.get("PANEL_PROVIDER") or "pasarguard").strip().lower()
+    if provider in {"goguard", "solidlayer", "solid-layer"}:
+        import asyncio
+        from app.config import normalize_pg_base_url
+        from app.services.goguard import GoGuardClient
+        from app.services.pg_access import public_pg_access_audit
+        from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
+
+        uname = (values.get("GOGUARD_USERNAME") or "").strip()
+        password = (values.get("GOGUARD_PASSWORD") or "").strip()
+        base = normalize_pg_base_url(values.get("GOGUARD_BASE_URL") or "")
+        if not uname or not password or not base:
+            return public_pg_access_audit({
+                "ok": False,
+                "error": "اعتبارنامه SolidLayer / GoGuard ناقص است (آدرس، نام کاربری و رمز عبور)",
+                "username": uname or None,
+            })
+        try:
+            base = await asyncio.to_thread(assert_safe_pg_base_url, base)
+        except UnsafePgUrlError as exc:
+            return public_pg_access_audit({"ok": False, "error": str(exc), "username": uname})
+        client = GoGuardClient(username=uname, password=password, base_url=base)
+        try:
+            await client.ensure_token()
+            admin = await client.get_current_admin()
+            if not admin:
+                return public_pg_access_audit({
+                    "ok": False,
+                    "error": "ورود موفق بود اما پروفایل ادمین GoGuard دریافت نشد",
+                    "username": uname,
+                })
+            role_name = str(admin.get("role_name") or "").strip().lower()
+            is_owner = role_name == "owner"
+            caps = {
+                "ok": True,
+                "error": None,
+                "username": str(admin.get("username") or uname),
+                "pg_is_owner": is_owner,
+                "pg_role_id": None,
+                "features": ["pg_overview", "pg_users", "pg_groups"],
+                "role": admin.get("role") if isinstance(admin.get("role"), dict) else {
+                    "name": role_name or "seller", "is_owner": is_owner, "limits": {},
+                },
+                "admin": admin,
+            }
+            audit = public_pg_access_audit(caps)
+            audit["account_label"] = "مالک SolidLayer / GoGuard" if is_owner else "ادمین SolidLayer / GoGuard"
+            if is_owner and audit.get("limits"):
+                audit["limits"][0]["value"] = "مالک پنل SolidLayer / GoGuard"
+            return audit
+        except Exception:
+            logger.exception("GoGuard setup access audit failed")
+            return public_pg_access_audit({
+                "ok": False,
+                "error": "بررسی دسترسی SolidLayer / GoGuard ناموفق بود",
+                "username": uname,
+            })
+        finally:
+            await client.close()
     uname = (values.get("PG_USERNAME") or "").strip()
     pwd = (values.get("PG_PASSWORD") or "").strip()
     api_key = (values.get("PG_API_KEY") or "").strip()
