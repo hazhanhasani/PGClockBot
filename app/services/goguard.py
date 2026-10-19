@@ -599,10 +599,6 @@ class GoGuardClient(PasarGuardClient):
         return []
 
     async def get_admin_role(self, role_id: int) -> dict:
-        current = await self.get_current_admin()
-        role = current.get("role") if isinstance(current, dict) else None
-        if isinstance(role, dict) and _as_int(role.get("id")) == int(role_id):
-            return role
         raise PasarGuardError("GoGuard API فهرست نقش‌های قابل مدیریت را ارائه نمی‌کند", 405)
 
     async def create_admin(self, payload: dict) -> dict:
