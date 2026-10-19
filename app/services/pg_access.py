@@ -188,7 +188,11 @@ async def resolve_platform_pg_capabilities(
     env_username = getattr(settings, "pg_username", None)
     env_password = getattr(settings, "pg_password", None)
     env_api_key = getattr(settings, "pg_api_key", None)
-    env_base_url = getattr(settings, "pg_base_url", None)
+    env_base_url = (
+        getattr(settings, "goguard_base_url", None)
+        if getattr(settings, "panel_provider", "pasarguard") == "goguard"
+        else getattr(settings, "pg_base_url", None)
+    )
     uname = (username if username is not None else env_username or "").strip()
     pwd = (password if password is not None else (env_password or "")).replace(
         "\r", ""
@@ -220,8 +224,11 @@ async def resolve_platform_pg_capabilities(
         "role": None,
         "admin": None,
     }
+    if settings.panel_provider == "goguard" and not pwd:
+        empty["error"] = "GoGuard به نام کاربری و رمز عبور نیاز دارد؛ کلید API پاسارگارد قابل استفاده نیست"
+        return empty
     if not uname or not (pwd or key):
-        empty["error"] = "اعتبارنامه پاسارگارد ناقص است (نام کاربری + رمز یا کلید API)"
+        empty["error"] = "اعتبارنامه پنل ناقص است (نام کاربری + رمز یا کلید API)"
         return empty
 
     client: PasarGuardClient | None = None
@@ -233,13 +240,22 @@ async def resolve_platform_pg_capabilities(
     )
     try:
         if own_client:
-            # Temporary client for setup probe — do not touch global get_pg() singleton.
-            # Prefer API key when provided; otherwise password grant.
-            client = PasarGuardClient(
-                username=uname,
-                password=pwd or None,
-                api_key=key or None,
-            )
+            # Temporary client for setup probe — do not touch the global singleton.
+            if settings.panel_provider == "goguard":
+                from app.services.goguard import GoGuardClient
+
+                client = GoGuardClient(
+                    username=uname,
+                    password=pwd or None,
+                    base_url=base_url or settings.goguard_base_url,
+                )
+            else:
+                # Prefer API key when provided; otherwise password grant.
+                client = PasarGuardClient(
+                    username=uname,
+                    password=pwd or None,
+                    api_key=key or None,
+                )
             if base_url:
                 try:
                     client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"), resolve_dns=False)
@@ -265,6 +281,30 @@ async def resolve_platform_pg_capabilities(
             client = get_pg()
 
         await client.ensure_token()
+        if settings.panel_provider == "goguard":
+            admin = await client.get_current_admin()
+            if not isinstance(admin, dict) or not admin:
+                raise PasarGuardError("GoGuard current-admin endpoint returned no profile")
+            role_name = str(admin.get("role_name") or "").strip().lower()
+            is_owner = role_name == "owner"
+            payload = {
+                "ok": True,
+                "error": None,
+                "username": str(admin.get("username") or uname),
+                "pg_is_owner": is_owner,
+                "pg_role_id": None,
+                "features": ["pg_overview", "pg_users", "pg_groups"],
+                "role": admin.get("role") if isinstance(admin.get("role"), dict) else {
+                    "name": role_name or "seller",
+                    "is_owner": is_owner,
+                    "limits": {},
+                },
+                "admin": admin,
+            }
+            if use_cache and not own_client:
+                _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(payload))
+            return payload
+
         # Token success already proves the account exists. Directory lookup
         # (GET /api/admins, /api/admin/{id}) often 403s for roles that only
         # have users.create — use GET /api/admin (self) first, then directory,
