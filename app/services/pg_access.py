@@ -641,18 +641,26 @@ def staff_from_platform_caps(caps: Mapping[str, Any] | None) -> dict[str, Any]:
     """
     caps = caps or {}
     role = caps.get("role") if isinstance(caps.get("role"), dict) else None
+    provider = str(caps.get("provider") or "pasarguard").strip().lower()
     features = list(caps.get("features") or [])
     pg_is_owner = bool(caps.get("pg_is_owner"))
-    if pg_is_owner:
+    if pg_is_owner and provider != "goguard":
         features = full_pg_owner_features()
         role = dict(role or {})
         role["is_owner"] = True
+    elif provider == "goguard" and isinstance(role, dict):
+        # GoGuard owners retain global subscription scope, but the compatibility
+        # layer only exposes operations supported by the GoGuard API.
+        role = dict(role)
+        role["is_owner"] = False
     staff = enrich_staff_pg_from_role(
         {"role": "admin", "pg_is_owner": pg_is_owner},
         features,
         role,
     )
     staff["pg_is_owner"] = pg_is_owner
+    staff["pg_provider"] = provider
+    staff["goguard_is_owner"] = bool(caps.get("goguard_is_owner"))
     if caps.get("username"):
         staff["pg_admin_username"] = caps["username"]
     if caps.get("pg_role_id") is not None:
@@ -685,7 +693,10 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
 
     staff = staff_from_platform_caps(caps)
     pg_is_owner = bool(staff.get("pg_is_owner"))
-    can_create = pg_is_owner or staff_has_pg_admins_create(staff)
+    provider = str(caps.get("provider") or "pasarguard").strip().lower()
+    can_create = False if provider == "goguard" else (
+        pg_is_owner or staff_has_pg_admins_create(staff)
+    )
     role = staff.get("pg_role") if isinstance(staff.get("pg_role"), dict) else None
     admin = caps.get("admin") if isinstance(caps.get("admin"), dict) else None
     role_name = None
