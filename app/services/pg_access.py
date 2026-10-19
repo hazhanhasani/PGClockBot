@@ -288,19 +288,34 @@ async def resolve_platform_pg_capabilities(
             if not isinstance(admin, dict) or not admin:
                 raise PasarGuardError("GoGuard current-admin endpoint returned no profile")
             role_name = str(admin.get("role_name") or "").strip().lower()
-            is_owner = role_name == "owner"
+            goguard_role = {
+                "id": None,
+                "name": role_name or "seller",
+                # GoGuard owner is not a PasarGuard owner: never grant unsupported
+                # Host/Node/template/admin mutations through the compatibility layer.
+                "is_owner": False,
+                "permissions": {
+                    "system": {"read": True},
+                    "users": {
+                        "read": True, "read_simple": True, "create": True,
+                        "update": True, "delete": True, "reset_usage": True,
+                        "revoke_sub": True,
+                    },
+                    "groups": {"read": True, "read_simple": True},
+                },
+                "limits": (admin.get("role") or {}).get("limits", {})
+                if isinstance(admin.get("role"), dict) else {},
+            }
             payload = {
                 "ok": True,
                 "error": None,
+                "provider": "goguard",
                 "username": str(admin.get("username") or uname),
-                "pg_is_owner": is_owner,
+                "pg_is_owner": False,
+                "goguard_is_owner": role_name == "owner",
                 "pg_role_id": None,
                 "features": ["pg_overview", "pg_users", "pg_groups"],
-                "role": admin.get("role") if isinstance(admin.get("role"), dict) else {
-                    "name": role_name or "seller",
-                    "is_owner": is_owner,
-                    "limits": {},
-                },
+                "role": goguard_role,
                 "admin": admin,
             }
             if use_cache and not own_client:
