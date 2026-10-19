@@ -185,14 +185,16 @@ async def resolve_platform_pg_capabilities(
     from app.services.pasarguard import PasarGuardClient, PasarGuardError
 
     settings = get_settings()
-    env_username = getattr(settings, "pg_username", None)
-    env_password = getattr(settings, "pg_password", None)
-    env_api_key = getattr(settings, "pg_api_key", None)
-    env_base_url = (
-        getattr(settings, "goguard_base_url", None)
-        if getattr(settings, "panel_provider", "pasarguard") == "goguard"
-        else getattr(settings, "pg_base_url", None)
-    )
+    if getattr(settings, "panel_provider", "pasarguard") == "goguard":
+        env_username = getattr(settings, "goguard_username", None)
+        env_password = getattr(settings, "goguard_password", None)
+        env_api_key = None
+        env_base_url = getattr(settings, "goguard_base_url", None)
+    else:
+        env_username = getattr(settings, "pg_username", None)
+        env_password = getattr(settings, "pg_password", None)
+        env_api_key = getattr(settings, "pg_api_key", None)
+        env_base_url = getattr(settings, "pg_base_url", None)
     uname = (username if username is not None else env_username or "").strip()
     pwd = (password if password is not None else (env_password or "")).replace(
         "\r", ""
