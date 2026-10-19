@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 from app.config import DATA_DIR, ROOT_DIR, get_settings, normalize_pg_base_url
 from app.services.web_auth import load_web_admin
 
