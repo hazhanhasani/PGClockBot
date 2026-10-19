@@ -1629,6 +1629,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         has_pg_password = bool((values.get("PG_PASSWORD") or "").strip())
         has_pg_api_key = bool((values.get("PG_API_KEY") or "").strip())
+        has_goguard_password = bool((values.get("GOGUARD_PASSWORD") or "").strip())
         # Never echo live secrets back into the HTML source — a re-run of the
         # wizard (e.g. to change one unrelated field) must not require
         # re-typing the bot token / PG password, but it also must not leak
@@ -1638,6 +1639,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         display_values["BOT_TOKEN"] = ""
         display_values["PG_PASSWORD"] = ""
         display_values["PG_API_KEY"] = ""
+        display_values["GOGUARD_PASSWORD"] = ""
         if pg_audit is None and (show_done or step >= 4):
             try:
                 pg_audit = await setup_pg_access_audit()
@@ -1651,6 +1653,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "has_bot_token": has_bot_token,
                 "has_pg_password": has_pg_password,
                 "has_pg_api_key": has_pg_api_key,
+                "has_goguard_password": has_goguard_password,
                 "initial_step": step,
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
@@ -1750,12 +1753,16 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/setup/other")
     async def setup_other(
         request: Request,
-        pg_base_url: str = Form(...),
+        panel_provider: str = Form("pasarguard"),
+        pg_base_url: str = Form(""),
         pg_subscription_path: str = Form("/sub"),
         pg_username: str = Form(""),
         pg_password: str = Form(""),
         pg_api_key: str = Form(""),
         clear_pg_api_key: str = Form(""),
+        goguard_base_url: str = Form(""),
+        goguard_username: str = Form(""),
+        goguard_password: str = Form(""),
         web_port: str = Form("9000"),
         public_base_url: str = Form(""),
         currency: str = Form("تومان"),
@@ -1770,6 +1777,67 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return JSONResponse({"ok": False, "error": "راه‌اندازی قبلاً کامل شده است"}, status_code=400)
             return RedirectResponse("/", status_code=303)
         begin_setup()
+        provider = (panel_provider or "pasarguard").strip().lower()
+        if provider in {"solidlayer", "solid-layer", "go_guard"}:
+            provider = "goguard"
+        if provider not in {"pasarguard", "goguard"}:
+            return await fail("نوع پنل نامعتبر است")
+
+        if provider == "goguard":
+            current_vals = current_setup_values()
+            base = normalize_pg_base_url(
+                (goguard_base_url or current_vals.get("GOGUARD_BASE_URL") or "").strip()
+            )
+            if not base:
+                return await fail("آدرس API پنل SolidLayer / GoGuard الزامی است.")
+            try:
+                base = await asyncio.to_thread(assert_safe_pg_base_url, base)
+            except UnsafePgUrlError as exc:
+                return await fail(str(exc))
+            gg_user = (goguard_username or current_vals.get("GOGUARD_USERNAME") or "").strip()
+            gg_pass = (goguard_password or current_vals.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
+            if not gg_user or not gg_pass:
+                return await fail("نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است.")
+            port = (web_port or "9000").strip()
+            try:
+                port_n = int(port)
+                if port_n < 1 or port_n > 65535:
+                    raise ValueError
+            except ValueError:
+                return await fail("پورت وب نامعتبر است.")
+            from app.services.goguard import GoGuardClient
+            probe = GoGuardClient(username=gg_user, password=gg_pass, base_url=base)
+            try:
+                await asyncio.wait_for(probe.ensure_token(), timeout=8.0)
+                admin = await asyncio.wait_for(probe.get_current_admin(), timeout=8.0)
+                if not admin:
+                    return await fail("ورود موفق بود اما پروفایل ادمین GoGuard دریافت نشد.")
+            except Exception:
+                return await fail("اتصال SolidLayer / GoGuard ناموفق بود؛ آدرس، نام کاربری و رمز را بررسی کنید.")
+            finally:
+                await probe.close()
+            ensure_web_secret()
+            pub = (public_base_url or "").strip().rstrip("/")
+            if pub.startswith("https://"):
+                pub = "http://" + pub[len("https://"):]
+            update_env_keys({
+                "PANEL_PROVIDER": "goguard",
+                "GOGUARD_BASE_URL": base,
+                "GOGUARD_USERNAME": gg_user,
+                "GOGUARD_PASSWORD": gg_pass,
+                "WEB_PORT": str(port_n),
+                "PUBLIC_BASE_URL": pub,
+                "CURRENCY": (currency or "").strip() or "تومان",
+            })
+            get_settings.cache_clear()
+            from app.services.pasarguard import reset_pg
+            from app.services.pg_access import clear_platform_pg_capability_cache
+            reset_pg()
+            clear_platform_pg_capability_cache()
+            if _setup_wants_json(request):
+                return JSONResponse({"ok": True, "next": "/setup?step=4"})
+            return RedirectResponse("/setup?step=4", status_code=303)
+
         try:
             sub_path = normalize_pg_subscription_path(pg_subscription_path)
         except ValueError as exc:
@@ -1846,6 +1914,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if pub.startswith("https://"):
             pub = "http://" + pub[len("https://") :]
         env_update: dict[str, str | int | None] = {
+            "PANEL_PROVIDER": "pasarguard",
             "PG_BASE_URL": base,
             "PG_SUBSCRIPTION_PATH": sub_path,
             "PG_USERNAME": (pg_username or "").strip(),
@@ -1856,6 +1925,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             "CURRENCY": (currency or "").strip() or "تومان",
         }
         update_env_keys(env_update)
+        get_settings.cache_clear()
+        from app.services.pasarguard import reset_pg
+        reset_pg()
         clear_platform_pg_capability_cache()
         if _setup_wants_json(request):
             return JSONResponse({"ok": True, "next": "/setup?step=4"})
