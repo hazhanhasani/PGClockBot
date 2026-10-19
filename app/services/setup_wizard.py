@@ -803,22 +803,38 @@ async def setup_pg_access_audit() -> dict[str, Any]:
                 })
             role_name = str(admin.get("role_name") or "").strip().lower()
             is_owner = role_name == "owner"
+            goguard_role = {
+                "id": None,
+                "name": role_name or "seller",
+                "is_owner": False,
+                "permissions": {
+                    "system": {"read": True},
+                    "users": {
+                        "read": True, "read_simple": True, "create": True,
+                        "update": True, "delete": True, "reset_usage": True,
+                        "revoke_sub": True,
+                    },
+                    "groups": {"read": True, "read_simple": True},
+                },
+                "limits": (admin.get("role") or {}).get("limits", {})
+                if isinstance(admin.get("role"), dict) else {},
+            }
             caps = {
                 "ok": True,
                 "error": None,
+                "provider": "goguard",
                 "username": str(admin.get("username") or uname),
-                "pg_is_owner": is_owner,
+                "pg_is_owner": False,
+                "goguard_is_owner": is_owner,
                 "pg_role_id": None,
                 "features": ["pg_overview", "pg_users", "pg_groups"],
-                "role": admin.get("role") if isinstance(admin.get("role"), dict) else {
-                    "name": role_name or "seller", "is_owner": is_owner, "limits": {},
-                },
+                "role": goguard_role,
                 "admin": admin,
             }
             audit = public_pg_access_audit(caps)
             audit["account_label"] = "مالک SolidLayer / GoGuard" if is_owner else "ادمین SolidLayer / GoGuard"
-            if is_owner and audit.get("limits"):
-                audit["limits"][0]["value"] = "مالک پنل SolidLayer / GoGuard"
+            audit["can_create_admin"] = False
+            audit["can_manage_representatives"] = False
             return audit
         except Exception:
             logger.exception("GoGuard setup access audit failed")
