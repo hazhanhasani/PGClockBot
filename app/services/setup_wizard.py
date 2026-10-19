@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import json
 import re
 import secrets
@@ -832,6 +833,9 @@ async def setup_pg_access_audit() -> dict[str, Any]:
                 "admin": admin,
             }
             audit = public_pg_access_audit(caps)
+            # Display the native GoGuard role, while retaining restricted
+            # PasarGuard-compatible permissions in the runtime capability map.
+            audit["pg_is_owner"] = is_owner
             audit["account_label"] = "مالک SolidLayer / GoGuard" if is_owner else "ادمین SolidLayer / GoGuard"
             audit["can_create_admin"] = False
             audit["can_manage_representatives"] = False
