@@ -199,12 +199,14 @@ class PasarGuardClient:
         password: str | None = None,
         access_token: str | None = None,
         api_key: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         self.settings = get_settings()
         # Recreated/rotated credentials must never reuse another client's ACL reads.
         self._cache_partition = secrets.token_hex(16)
-        # Use settings value as-is (already normalized with path preserved)
-        self.base_url = (self.settings.pg_base_url or "").rstrip("/")
+        # Explicit base_url supports alternate panel adapters and temporary probes.
+        configured_base = self.settings.pg_base_url if base_url is None else base_url
+        self.base_url = (configured_base or "").rstrip("/")
         if self.base_url:
             try:
                 self.base_url = assert_safe_pg_base_url(self.base_url, resolve_dns=False)
@@ -983,11 +985,24 @@ def _cached_client_ready(client: Any) -> bool:
     return bool(getattr(client, "_token", None) or getattr(client, "_api_key", None))
 
 
+def _new_pg_client(**kwargs: Any) -> PasarGuardClient:
+    """Build the configured panel adapter while preserving the existing call interface."""
+    if get_settings().panel_provider == "goguard":
+        from app.services.goguard import GoGuardClient
+
+        if kwargs.get("api_key"):
+            raise PasarGuardError(
+                "GoGuard از احراز هویت با API key پاسارگارد پشتیبانی نمی‌کند؛ رمز ادمین لازم است"
+            )
+        return GoGuardClient(**kwargs)
+    return PasarGuardClient(**kwargs)
+
+
 def get_pg() -> PasarGuardClient:
-    """Platform owner PasarGuard client (env credentials)."""
+    """Active panel client: PasarGuard by default, or GoGuard when selected."""
     global _pg
     if _pg is None:
-        _pg = PasarGuardClient()
+        _pg = _new_pg_client()
     return _pg
 
 
@@ -1104,8 +1119,8 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         return await get_pg_for_principal(session, principal_id=int(linked.id))
 
     api_key = decrypt_secret(getattr(profile, "pg_api_key_enc", None))
-    if api_key:
-        client = PasarGuardClient(
+    if api_key and get_settings().panel_provider != "goguard":
+        client = _new_pg_client(
             username=profile.pg_admin_username,
             api_key=api_key,
         )
@@ -1123,7 +1138,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
             "علت محتمل: راه‌اندازی ناقص یا کلید رمزنگاری تغییر کرده. "
             "راه حل: ادمین اصلی از بخش نمایندگان کلید API یا رمز را ثبت/بازنشانی کند."
         )
-    client = PasarGuardClient(
+    client = _new_pg_client(
         username=profile.pg_admin_username,
         password=password,
     )
@@ -1179,8 +1194,8 @@ async def get_pg_for_staff(
     if _cached_client_ready(cached):
         return cached
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
-    if api_key:
-        client = PasarGuardClient(username=row.pg_username, api_key=api_key)
+    if api_key and get_settings().panel_provider != "goguard":
+        client = _new_pg_client(username=row.pg_username, api_key=api_key)
         api_key = ""
         await client.ensure_token()
         for stale_key in [k for k in _pg_staff_cache if k[0] == sid and k != cache_key]:
@@ -1194,7 +1209,7 @@ async def get_pg_for_staff(
             "علت محتمل: اعطای ناقص یا کلید رمزنگاری تغییر کرده. "
             "راه حل: ادمین اصلی از «ادمین‌ها» کلید API یا رمز ادمین فرعی را ثبت کند."
         )
-    client = PasarGuardClient(username=row.pg_username, password=password)
+    client = _new_pg_client(username=row.pg_username, password=password)
     password = ""
     await client.ensure_token()
     # Drop stale keys for this staff row (username rename) and legacy
@@ -1276,8 +1291,8 @@ async def get_pg_for_principal(
     if _cached_client_ready(cached):
         return cached
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
-    if api_key:
-        client = PasarGuardClient(username=uname, api_key=api_key)
+    if api_key and get_settings().panel_provider != "goguard":
+        client = _new_pg_client(username=uname, api_key=api_key)
         api_key = ""
         await client.ensure_token()
         for stale_key in [k for k in _pg_principal_cache if k[0] == pid and k != cache_key]:
@@ -1291,7 +1306,7 @@ async def get_pg_for_principal(
             "علت محتمل: provisioning ناقص یا کلید رمزنگاری تغییر کرده. "
             "راه حل: ادمین اصلی کلید API یا رمز Principal را ثبت کند."
         )
-    client = PasarGuardClient(username=uname, password=password)
+    client = _new_pg_client(username=uname, password=password)
     # Local plaintext reference must not outlive token acquisition.
     password = ""
     await client.ensure_token()
@@ -1306,7 +1321,9 @@ def public_pg_api_base() -> str:
     client = _pg
     if client and client.base_url:
         return client.base_url.rstrip("/")
-    cands = pg_api_base_candidates(get_settings().pg_base_url or "")
+    settings = get_settings()
+    active_base = settings.goguard_base_url if settings.panel_provider == "goguard" else settings.pg_base_url
+    cands = pg_api_base_candidates(active_base or "")
     return (cands[0] if cands else "").rstrip("/")
 
 
@@ -1326,7 +1343,9 @@ def public_pg_sub_origin() -> str:
     if client and getattr(client, "base_url", None):
         raw = str(client.base_url or "")
     if not raw:
-        raw = get_settings().pg_base_url or ""
+        settings = get_settings()
+        raw = settings.goguard_base_url if settings.panel_provider == "goguard" else settings.pg_base_url
+        raw = raw or ""
     base = normalize_pg_base_url(raw)
     if not base:
         return ""
@@ -1412,6 +1431,7 @@ def user_subscription_url(user: dict | None) -> str | None:
         return None
     for key in (
         "subscription_url",
+        "subscription_link",
         "subscription",
         "sub_url",
         "link",
