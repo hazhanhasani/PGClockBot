@@ -595,6 +595,9 @@ def current_setup_values() -> dict[str, str]:
     # Never force-write "admin" into an empty first-time form.
     has_creds = bool(creds.get("password"))
     webhook_url = normalize_webhook_base_url(_env_get("WEBHOOK_URL"))
+    panel_provider = (_env_get("PANEL_PROVIDER") or "pasarguard").strip().lower()
+    if panel_provider in {"solidlayer", "solid-layer", "go_guard"}:
+        panel_provider = "goguard"
     return {
         "username": (creds.get("username") or "") if has_creds else "",
         "BOT_TOKEN": _env_get("BOT_TOKEN"),
@@ -605,7 +608,7 @@ def current_setup_values() -> dict[str, str]:
         "PG_USERNAME": _env_get("PG_USERNAME"),
         "PG_PASSWORD": _env_get("PG_PASSWORD"),
         "PG_API_KEY": _env_get("PG_API_KEY"),
-        "PANEL_PROVIDER": _env_get("PANEL_PROVIDER") or "pasarguard",
+        "PANEL_PROVIDER": panel_provider,
         "GOGUARD_BASE_URL": _env_get("GOGUARD_BASE_URL"),
         "GOGUARD_USERNAME": _env_get("GOGUARD_USERNAME"),
         "GOGUARD_PASSWORD": _env_get("GOGUARD_PASSWORD"),
