@@ -311,7 +311,7 @@ async def resolve_platform_pg_capabilities(
                 "error": None,
                 "provider": "goguard",
                 "username": str(admin.get("username") or uname),
-                "pg_is_owner": False,
+                "pg_is_owner": role_name == "owner",
                 "goguard_is_owner": role_name == "owner",
                 "pg_role_id": None,
                 "features": ["pg_overview", "pg_users", "pg_groups"],
