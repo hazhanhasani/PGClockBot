@@ -1631,6 +1631,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         has_pg_password = bool((values.get("PG_PASSWORD") or "").strip())
         has_pg_api_key = bool((values.get("PG_API_KEY") or "").strip())
         has_goguard_password = bool((values.get("GOGUARD_PASSWORD") or "").strip())
+        has_goguard_api_key = bool((values.get("GOGUARD_API_KEY") or "").strip())
         # Never echo live secrets back into the HTML source — a re-run of the
         # wizard (e.g. to change one unrelated field) must not require
         # re-typing the bot token / PG password, but it also must not leak
@@ -1641,6 +1642,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         display_values["PG_PASSWORD"] = ""
         display_values["PG_API_KEY"] = ""
         display_values["GOGUARD_PASSWORD"] = ""
+        display_values["GOGUARD_API_KEY"] = ""
         if pg_audit is None and (show_done or step >= 4):
             try:
                 pg_audit = await setup_pg_access_audit()
@@ -1655,6 +1657,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "has_pg_password": has_pg_password,
                 "has_pg_api_key": has_pg_api_key,
                 "has_goguard_password": has_goguard_password,
+                "has_goguard_api_key": has_goguard_api_key,
                 "initial_step": step,
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
@@ -1764,6 +1767,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         goguard_base_url: str = Form(""),
         goguard_username: str = Form(""),
         goguard_password: str = Form(""),
+        goguard_api_key: str = Form(""),
         web_port: str = Form("9000"),
         public_base_url: str = Form(""),
         currency: str = Form("تومان"),
@@ -1797,8 +1801,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return await fail(str(exc))
             gg_user = (goguard_username or current_vals.get("GOGUARD_USERNAME") or "").strip()
             gg_pass = (goguard_password or current_vals.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
-            if not gg_user or not gg_pass:
-                return await fail("نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است.")
+            gg_key = (goguard_api_key or current_vals.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            if not gg_key and not (gg_user and gg_pass):
+                return await fail("کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.")
             port = (web_port or "9000").strip()
             try:
                 port_n = int(port)
@@ -1807,7 +1812,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             except ValueError:
                 return await fail("پورت وب نامعتبر است.")
             from app.services.goguard import GoGuardClient
-            probe = GoGuardClient(username=gg_user, password=gg_pass, base_url=base)
+            probe = GoGuardClient(username=gg_user or None, password=gg_pass or None, api_key=gg_key or None, base_url=base)
             try:
                 await asyncio.wait_for(probe.ensure_token(), timeout=8.0)
                 admin = await asyncio.wait_for(probe.get_current_admin(), timeout=8.0)
@@ -1826,6 +1831,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "GOGUARD_BASE_URL": base,
                 "GOGUARD_USERNAME": gg_user,
                 "GOGUARD_PASSWORD": gg_pass,
+                "GOGUARD_API_KEY": gg_key,
                 "WEB_PORT": str(port_n),
                 "PUBLIC_BASE_URL": pub,
                 "CURRENCY": (currency or "").strip() or "تومان",
@@ -4758,6 +4764,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             goguard_base = normalize_pg_base_url(str(form.get("GOGUARD_BASE_URL") or current.get("GOGUARD_BASE_URL") or "").strip())
             goguard_user = str(form.get("GOGUARD_USERNAME") or current.get("GOGUARD_USERNAME") or "").strip()
             goguard_pass = str(form.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip() or str(current.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
+            goguard_key = str(form.get("GOGUARD_API_KEY") or "").replace("\r", "").strip() or str(current.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
 
             pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
             pg_user = str(form.get("PG_USERNAME") or "").strip()
@@ -4801,8 +4808,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     goguard_base = await asyncio.to_thread(assert_safe_pg_base_url, goguard_base)
                 except UnsafePgUrlError as exc:
                     return _bot_err(str(exc))
-                if not goguard_user or not goguard_pass:
-                    return _bot_err("نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است")
+                if not goguard_key and not (goguard_user and goguard_pass):
+                    return _bot_err("کلید API یا نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است")
                 pg_base = normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip())
                 pg_user = str(current.get("PG_USERNAME") or "").strip()
                 pg_pass = str(current.get("PG_PASSWORD") or "").strip()
@@ -4812,7 +4819,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 except ValueError:
                     pg_sub_path = "/sub"
                 from app.services.goguard import GoGuardClient
-                probe = GoGuardClient(username=goguard_user, password=goguard_pass, base_url=goguard_base)
+                probe = GoGuardClient(username=goguard_user or None, password=goguard_pass or None, api_key=goguard_key or None, base_url=goguard_base)
                 try:
                     await asyncio.wait_for(probe.ensure_token(), timeout=8.0)
                     admin = await asyncio.wait_for(probe.get_current_admin(), timeout=8.0)
@@ -4858,6 +4865,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "GOGUARD_BASE_URL": goguard_base,
                 "GOGUARD_USERNAME": goguard_user,
                 "GOGUARD_PASSWORD": goguard_pass,
+                "GOGUARD_API_KEY": goguard_key,
                 "PG_BASE_URL": pg_base,
                 "PG_SUBSCRIPTION_PATH": pg_sub_path,
                 "PG_USERNAME": pg_user,
@@ -4883,6 +4891,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "GOGUARD_BASE_URL": normalize_pg_base_url(str(current.get("GOGUARD_BASE_URL") or "").strip()),
                 "GOGUARD_USERNAME": str(current.get("GOGUARD_USERNAME") or "").strip(),
                 "GOGUARD_PASSWORD": str(current.get("GOGUARD_PASSWORD") or "").strip(),
+                "GOGUARD_API_KEY": str(current.get("GOGUARD_API_KEY") or "").strip(),
                 "PG_BASE_URL": normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip()),
                 "PG_SUBSCRIPTION_PATH": normalize_pg_subscription_path(current.get("PG_SUBSCRIPTION_PATH")),
                 "PG_USERNAME": str(current.get("PG_USERNAME") or "").strip(),
