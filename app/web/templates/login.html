@@ -36,7 +36,7 @@
         </div>
         <small class="muted">برای نماینده: همان رمز پاسارگارد</small>
       </label>
-      <button class="btn" type="submit" id="login-submit">ورود به پنل</button>
+      <button class="btn" type="submit" id="login-submit" {% if request.query_params.get('restarting') == '1' %}disabled{% endif %}>ورود به پنل</button>
     </form>
     <div class="auth-foot">© ۲۰۲۶ MrClockBot</div>
   </div>
@@ -121,25 +121,33 @@
 <script>
 (function(){
   const el = document.getElementById('login-restart');
-  let tries = 0, sawDown = false, started = Date.now();
+  const submit = document.getElementById('login-submit');
+  // Setup may restart uvicorn after rendering this page. Do not send POST
+  // credentials into a stopping listener: the browser reports CONNECTION_CLOSED.
+  if (submit) submit.disabled = true;
+  let tries = 0, healthy = 0, ready = false;
+  const started = Date.now();
   const t = setInterval(async () => {
     tries++;
     try {
       const r = await fetch('/health', { cache: 'no-store' });
-      if (!r.ok) sawDown = true;
-      else if (sawDown || Date.now() - started > 4000) {
+      healthy = r.ok ? healthy + 1 : 0;
+      // Require consecutive successful responses after the startup grace period.
+      if (healthy >= 2 && Date.now() - started > 2500) {
+        ready = true;
         clearInterval(t);
         if (el) el.hidden = true;
+        if (submit) submit.disabled = false;
         const url = new URL(location.href);
         url.searchParams.delete('restarting');
         history.replaceState(null, '', url);
       }
-    } catch (_) { sawDown = true; }
-    if (tries > 45) {
+    } catch (_) { healthy = 0; }
+    if (!ready && tries > 45) {
       clearInterval(t);
       if (el) {
         el.hidden = false;
-        el.textContent = 'ری‌استارت طول کشید — در صورت نیاز: sudo systemctl restart pgclockbot';
+        el.textContent = 'اتصال به سرویس برقرار نشد. وضعیت سرویس را بررسی کنید: sudo systemctl status pgclockbot';
       }
     }
   }, 800);
