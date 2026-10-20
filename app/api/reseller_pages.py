@@ -203,12 +203,26 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         from app.services.users import get_setting
         from fastapi import HTTPException
 
-        try:
-            await assert_live_parent_for_child(session, staff)
-        except RepresentativeUnifyError:
-            raise HTTPException(status_code=403, detail="forbidden")
-
         owner_view = is_explicit_owner_staff(staff)
+        if owner_view:
+            # Listing local representatives is an Owner capability even if the
+            # active panel has no admins.create (GoGuard) or is offline.
+            # Never grant mutation rights from this read-only bypass.
+            from app.services.org_principals import ensure_owner_principal, STATUS_ACTIVE
+
+            owner = await ensure_owner_principal(session)
+            if owner is None or str(owner.status) != STATUS_ACTIVE:
+                raise HTTPException(status_code=403, detail="forbidden")
+        else:
+            try:
+                await assert_live_parent_for_child(session, staff)
+            except RepresentativeUnifyError:
+                raise HTTPException(status_code=403, detail="forbidden")
+
+        from app.services.representative_unification import staff_can_manage_representatives
+
+        provider = get_settings().panel_provider
+        can_manage_reps = staff_can_manage_representatives(staff) and provider == "pasarguard"
         l2_pg_roles: list[dict] = []
         if not owner_view:
             try:
@@ -307,7 +321,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 pass
         roles = []
         reseller_usage: dict = {}
-        if owner_view:
+        if owner_view and provider == "pasarguard":
             try:
                 roles = await get_pg().get_admin_roles()
             except Exception:
@@ -381,7 +395,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "open_edit": request.query_params.get("edit"),
                 "q": search_q,
                 "owner_view": owner_view,
-                "can_create_l2": not owner_view,
+                "panel_provider": provider,
+                "can_manage_reps": can_manage_reps,
+                "can_create_l2": not owner_view and can_manage_reps,
                 "l2_pg_roles": l2_pg_roles,
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
