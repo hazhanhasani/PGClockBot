@@ -10,13 +10,26 @@
     {{ page_title('users', 'نمایندگان من', help='resellers') }}
     {% endif %}
   </div>
-  {% if owner_view %}
+  {% if owner_view and can_manage_reps %}
   <button type="button" class="btn" data-modal-open="modal-reseller-create">افزودن نماینده</button>
   {% elif can_create_l2 %}
   <button type="button" class="btn" data-modal-open="modal-reseller-create-child">افزودن نماینده</button>
   {% endif %}
 </div>
 
+{% if owner_view and not can_manage_reps %}
+<div class="flash warn" role="status">
+  <strong>مدیریت نمایندگان در دسترس است؛ ساخت ادمین پنل مقصد فعلاً فعال نیست.</strong>
+  {% if panel_provider == 'goguard' %}
+  <p>API پنل SolidLayer / GoGuard قابلیت ایجاد ادمین مستقل ندارد؛
+  نمایندگان قبلی همچنان در این فهرست قابل مشاهده‌اند. برای ایجاد دسترسی جدید
+  لازم است ادمین یا کلید مستقل در پنل مقصد تنظیم شود.</p>
+  {% else %}
+  <p>حساب متصل مجوز admins.create ندارد یا اتصال پنل موقتاً در دسترس نیست.
+  برای امنیت، ساخت نماینده غیرفعال است اما اطلاعات نمایندگان فعلی نمایش داده می‌شود.</p>
+  {% endif %}
+</div>
+{% endif %}
 {% if owner_view %}
 <div class="section-tabs">
   {% for t in tabs %}
@@ -24,6 +37,7 @@
   {% endfor %}
 </div>
 
+{% if can_manage_reps %}
 <div class="card settings-card">
   <h2>تنظیمات نمایندگی</h2>
   <p class="muted update-card-caption">
@@ -88,7 +102,9 @@
     </div>
   </form>
 </div>
+{% endif %}
 
+{% if can_manage_reps %}
 <div class="card settings-card">
   <h2>همگام‌سازی ظرفیت از پاسارگارد</h2>
   <p class="muted update-card-caption">
@@ -104,6 +120,7 @@
     </div>
   </form>
 </div>
+{% endif %}
 {% endif %}
 
 <div class="card card-flush">
@@ -253,7 +270,7 @@
   </div>
 </div>
 
-{% if owner_view %}
+{% if owner_view and can_manage_reps %}
 <div class="ui-modal" id="modal-reseller-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
