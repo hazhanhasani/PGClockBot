@@ -875,7 +875,7 @@ async def open_reseller_home(
         from app.services.home_overview import reseller_shop_summary
         from app.services.reseller_bot_dashboard import format_reseller_shop_kpis
 
-        metrics = await reseller_shop_summary(session, int(reseller_owner_id))
+        metrics = await reseller_shop_summary(session, int(hub.owner_id))
         body += "\n\n" + format_reseller_shop_kpis(
             metrics, currency=get_settings().currency
         )
