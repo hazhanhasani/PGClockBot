@@ -1190,22 +1190,38 @@ async def open_admin_resellers_hub(
 ) -> None:
     from app.bot.nav_inline import admin_resellers_hub_keyboard, present_nav_panel
     from app.bot.auth import platform_can_manage_representatives
+    from app.db.models import ResellerApplication, ResellerApplicationStatus
+    from sqlalchemy import func, select
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
-    if not await platform_can_manage_representatives():
-        await message.answer(feedback.REPRESENTATIVES_DISABLED)
-        return
+    can_create = await platform_can_manage_representatives()
     ui = await get_all_settings(session)
+    active_count = int(await session.scalar(
+        select(func.count()).select_from(BotUser).where(BotUser.role == Role.RESELLER.value)
+    ) or 0)
+    pending_count = int(await session.scalar(
+        select(func.count()).select_from(ResellerApplication).where(
+            ResellerApplication.status == ResellerApplicationStatus.AWAITING_APPROVAL.value
+        )
+    ) or 0)
     body = (
         with_caption(screen_heading(ui, "a.resellers"), screen_caption(ui, "a.resellers"))
+        + f"\n\n🤝 <b>نمایندگان ثبت‌شده:</b> {active_count}"
+        + f"\n📋 <b>درخواست‌های منتظر بررسی:</b> {pending_count}"
+        + (
+            "\n\n🔒 <b>حالت مشاهده:</b> ساخت ادمین نمایندگی در API GoGuard موجود نیست؛ "
+            "فهرست و درخواست‌ها قابل مشاهده‌اند."
+            if not can_create else
+            "\n\n✅ امکان ایجاد نماینده از منوی زیر فعال است."
+        )
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
     await present_nav_panel(
-        message, text=body, inline=admin_resellers_hub_keyboard(ui), state=state
+        message, text=body, inline=admin_resellers_hub_keyboard(ui, can_create=can_create), state=state
     )
     return
 
@@ -1739,12 +1755,9 @@ async def _soft_admin(
             message, session, db_user, is_reseller_bot=is_reseller_bot
         ):
             return
-        if data.startswith("adm:resellers") or data.startswith("adm:resapp"):
-            from app.bot.auth import platform_can_manage_representatives
-
-            if not await platform_can_manage_representatives():
-                await message.answer(feedback.REPRESENTATIVES_DISABLED)
-                return
+        # Representative reads are available to platform Owner even when
+        # GoGuard cannot provision admins. Individual write handlers retain
+        # their own server-side capabilities checks.
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
     try:
