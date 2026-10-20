@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     goguard_base_url: str = Field(default="", alias="GOGUARD_BASE_URL")
     goguard_username: str = Field(default="", alias="GOGUARD_USERNAME")
     goguard_password: str = Field(default="", alias="GOGUARD_PASSWORD")
+    goguard_api_key: str = Field(default="", alias="GOGUARD_API_KEY")
 
     connection_monitor_xray_path: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_PATH")
     connection_monitor_xray_sha256: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_SHA256")
@@ -177,6 +178,7 @@ class Settings(BaseSettings):
         "goguard_base_url",
         "goguard_username",
         "goguard_password",
+        "goguard_api_key",
         "web_host",
         "web_secret",
         "web_admin_user",
