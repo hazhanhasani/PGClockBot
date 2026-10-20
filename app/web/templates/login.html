@@ -11,7 +11,7 @@
     <div class="auth-brand">
       <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
       <h1 dir="ltr">MrClockBot</h1>
-      <p>ورود به پنل مدیریت فروش — نمایندگان: همان یوزر/رمز پاسارگارد</p>
+      <p>ورود به پنل مدیریت فروش — پنل فعال: {{ 'SolidLayer / GoGuard' if active_panel_provider() == 'goguard' else 'PasarGuard' }}</p>
     </div>
     <form class="auth-form auth-form--card" method="post" action="/login" autocomplete="on" id="login-form"
           data-no-nav-clock>
@@ -24,7 +24,7 @@
         <input name="username" id="login-username" value="{{ username or '' }}" required autocomplete="username"
                dir="ltr" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false"
                placeholder="user_name" />
-        <small class="muted">برای نماینده: همان یوزر پاسارگارد</small>
+        <small class="muted">حساب مدیر پنل یا حساب نمایندگی متصل</small>
       </label>
       <label>رمز عبور
         <div class="pw-field">
@@ -34,7 +34,7 @@
             <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <small class="muted">برای نماینده: همان رمز پاسارگارد</small>
+        <small class="muted">رمز مربوط به همین حساب پنل</small>
       </label>
       <button class="btn" type="submit" id="login-submit" {% if request.query_params.get('restarting') == '1' %}disabled{% endif %}>ورود به پنل</button>
     </form>

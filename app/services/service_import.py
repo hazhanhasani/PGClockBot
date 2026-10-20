@@ -250,7 +250,13 @@ async def own_admin_identity(pg: Any, *, refresh: bool = False) -> str:
     Asked from the panel (``GET /api/admin``) instead of trusting a setting. A failure is not
     cached, so the next try asks again.
     """
-    key = str(getattr(pg, "base_url", "") or "")
+    key = (
+        str(getattr(pg, "base_url", "") or "")
+        + "|"
+        + str(getattr(pg, "_cache_partition", None) or id(pg))
+    )
+    # Same server can serve multiple seller identities; never reuse owner
+    # identity from another credential in the shared service-import cache.
     hit = _identity_cache.get(key)
     now = time.monotonic()
     if hit and not refresh and now - hit[0] < IDENTITY_TTL_SECONDS:
@@ -283,9 +289,15 @@ async def allowed_admins(
         profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)))
         name = ((profile.pg_admin_username if profile else "") or "").strip().lower()
         return frozenset({name} if name else ())
+    settings = get_settings()
+    configured_admin = (
+        settings.goguard_username
+        if settings.panel_provider == "goguard"
+        else settings.pg_username
+    )
     names = {
         await own_admin_identity(pg, refresh=refresh),
-        (get_settings().pg_username or "").strip().lower(),
+        (configured_admin or "").strip().lower(),
         *config.extra_admins,
     }
     names.discard("")
@@ -347,7 +359,20 @@ async def verify_link(
     admins = await allowed_admins(session, pg, shop_id, config, refresh=refresh)
     if not admins:
         raise ServiceImportError(PANEL_UNAVAILABLE, Reason.IDENTITY_UNKNOWN)
-    info, prefix = await _subscription_info(pg, link, allowed_paths(config))
+    paths = list(allowed_paths(config))
+    if get_settings().panel_provider == "goguard":
+        # GoGuard public links are /{subscription_tag}/{access_key}, not
+        # PasarGuard's /sub/{token}. Trust the live admin's configured tag;
+        # do not auto-allow arbitrary customer-supplied paths.
+        from urllib.parse import quote
+
+        admin = await pg.get_current_admin()
+        tag = str((admin or {}).get("subscription_tag") or (admin or {}).get("subscription_prefix") or "").strip()
+        if tag and not any(char in tag for char in "/\\?#\r\n"):
+            prefix = "/" + quote(tag, safe="")
+            if prefix not in paths:
+                paths.insert(0, prefix)
+    info, prefix = await _subscription_info(pg, link, tuple(paths))
     record = await _panel_record(pg, info)
     owner = pg_user_owner_username(record)
     if owner not in admins:

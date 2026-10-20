@@ -969,13 +969,22 @@ async def pg_create_menu(
         return
     await callback.answer()
     await state.clear()
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=[
+    from app.config import get_settings
+
+    if get_settings().panel_provider == "goguard":
+        options = [
+            [InlineKeyboardButton(
+                text="➕ ساخت اشتراک (سرویس + حجم + روز)",
+                callback_data="adm:pg:create:custom",
+            )],
+        ]
+    else:
+        options = [
             [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:pg:create:tpl")],
             [InlineKeyboardButton(text="🛠 سفارشی (گروه + حجم + روز)", callback_data="adm:pg:create:custom")],
-            [kb.back_button(None, "adm:pg:users")],
         ]
-    )
+    options.append([kb.back_button(None, "adm:pg:users")])
+    markup = InlineKeyboardMarkup(inline_keyboard=options)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1003,6 +1012,14 @@ async def pg_create_tpl_pick(
         callback=callback,
     )
     if not gate.allowed:
+        return
+    from app.config import get_settings
+
+    if get_settings().panel_provider == "goguard":
+        await callback.answer(
+            "GoGuard تمپلیت کاربر ندارد؛ از «ساخت اشتراک» و انتخاب سرویس استفاده کنید.",
+            show_alert=True,
+        )
         return
     await callback.answer()
     # Never leave create_username active with a null template id (stale inline
@@ -1117,6 +1134,8 @@ async def pg_create_custom_groups(
 async def _show_create_group_picker(
     callback: CallbackQuery, state: FSMContext, *, pg, staff=None
 ) -> None:
+    from app.config import get_settings
+
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     edit_uid = data.get("pg_edit_uid")
@@ -1162,8 +1181,10 @@ async def _show_create_group_picker(
         rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data=back_cb)])
     rows.append([kb.back_button(None, back_cb)])
     text = (
-        "📁 گروه‌ها را انتخاب کنید (چندتایی):\n"
-        f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
+        ("🌐 سرویس‌های GoGuard را انتخاب کنید (چندتایی):\n"
+         if get_settings().panel_provider == "goguard"
+         else "📁 گروه‌ها را انتخاب کنید (چندتایی):\n")
+        + f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
     )
     if callback.message:
         await safe_edit_text(

@@ -522,6 +522,25 @@ async def _reserve_discount_code(
     return discount, row.code
 
 
+def ensure_plan_compatible_with_panel(plan: Plan) -> None:
+    """Reject provider-specific catalog mistakes before collecting payment.
+
+    GoGuard requires service IDs (our shared Plan.pg_group_ids field), not a
+    PasarGuard user template. The sell path must never accept a plan it cannot
+    deliver and only discover the problem after the customer paid.
+    """
+    from app.config import get_settings
+    from app.services.pasarguard import parse_group_ids
+
+    if get_settings().panel_provider != "goguard":
+        return
+    if not parse_group_ids(getattr(plan, "pg_group_ids", None)):
+        raise ValueError(
+            "این پلن برای GoGuard آماده نیست؛ از مدیریت پلن‌ها حداقل یک سرویس GoGuard "
+            "انتخاب کنید. تمپلیت پاسارگارد در GoGuard قابل استفاده نیست."
+        )
+
+
 async def create_order(
     session: AsyncSession,
     *,
@@ -536,6 +555,7 @@ async def create_order(
     plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active:
         raise ValueError("پلن یافت نشد")
+    ensure_plan_compatible_with_panel(plan)
     assert_expected_price(displayed_quote(plan), expected_price)
     shop_rid = _shop_reseller_id()
     # Ignore sticky attribution from caller — shop bot context wins.
@@ -873,6 +893,7 @@ async def create_wholesale_order(
     plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active or plan.is_trial:
         raise ValueError("پلن برای فروش عمده در دسترس نیست")
+    ensure_plan_compatible_with_panel(plan)
 
     mn, mx = wholesale_bounds(ui)
     qty = int(quantity)
@@ -2279,6 +2300,17 @@ async def renew_service_with_plan(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
 
+    from app.config import get_settings
+    if get_settings().panel_provider == "goguard":
+        # Catch unsupported on-hold/unknown remaining quotas before customer
+        # pays. A paid order should never be the first compatibility probe.
+        from app.services.pasarguard import get_pg_for_reseller
+        from app.services.service_renewals import calculate_renewal
+
+        client = await get_pg_for_reseller(session, shop_rid) if shop_rid else get_pg()
+        live = await client.get_user_by_id(service.pg_user_id)
+        calculate_renewal(live, terms, provider="goguard")
+
     quote = await quote_product(session, plan, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
     order = Order(
@@ -2409,8 +2441,13 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
     payload = snapshot.get("target")
     if payload is None:
         from app.services.service_renewals import calculate_renewal
+        from app.config import get_settings
 
-        payload = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)["payload"]
+        payload = calculate_renewal(
+            await pg.get_user_by_id(service.pg_user_id),
+            snapshot,
+            provider=get_settings().panel_provider,
+        )["payload"]
     gate_expire = payload["expire"]
     if payload.get("on_hold_expire_duration"):
         gate_expire = int(time.time()) + payload["on_hold_expire_duration"]

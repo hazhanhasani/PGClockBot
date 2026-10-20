@@ -177,11 +177,17 @@ def main() -> None:
                 async def _pg_warmup() -> None:
                     try:
                         await get_pg().ensure_token()
-                        logger.info("PasarGuard panel login OK · %s", get_settings().pg_base_url)
+                        logger.info(
+                            "%s panel login OK · %s",
+                            get_settings().panel_provider,
+                            get_settings().goguard_base_url
+                            if get_settings().panel_provider == "goguard"
+                            else get_settings().pg_base_url,
+                        )
                     except Exception:
                         logger.exception(
-                            "PasarGuard login FAILED — fix PG_BASE_URL / PG_USERNAME / PG_PASSWORD "
-                            "(use https://host only, no path)"
+                            "%s panel login FAILED — check the active panel URL and credentials",
+                            get_settings().panel_provider
                         )
 
                 pg_warmup_task = asyncio.create_task(_pg_warmup())

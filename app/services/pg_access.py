@@ -819,12 +819,17 @@ def enrich_staff_pg_from_role(user: dict, features: list[str], role: dict | None
 
 
 def staff_pg_writes(staff: dict) -> dict[str, bool]:
-    """Broad write flags — Hybrid: Owner shop bypass does not imply PG writes."""
+    """Broad write flags — never advertise unsupported GoGuard mutations."""
+    from app.config import get_settings
     from app.services.authz import authz_from_staff, can_pg_write_resource
 
     ctx = authz_from_staff(staff)
     keys = ("users", "templates", "groups", "hosts", "nodes")
-    return {k: can_pg_write_resource(ctx, k) for k in keys}
+    writes = {k: can_pg_write_resource(ctx, k) for k in keys}
+    if get_settings().panel_provider == "goguard":
+        for key in ("templates", "groups", "hosts", "nodes"):
+            writes[key] = False
+    return writes
 
 
 def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
@@ -834,7 +839,17 @@ def staff_pg_action(staff: dict, resource: str, action: str) -> bool:
     (never Owner-grade ops) and fail closed when PG identity/capabilities
     are not ready.
     """
+    from app.config import get_settings
     from app.services.authz import authz_from_staff, can_pg_action
+    if get_settings().panel_provider == "goguard":
+        # GoGuard documents read-only service/node discovery, but has no CRUD
+        # endpoints for PasarGuard templates, groups, hosts, nodes or admins.
+        if resource in {"templates", "groups", "hosts", "nodes", "admins"} and action not in {
+            "read", "read_simple", "list", "view",
+        }:
+            return False
+        if resource == "admins" and action in {"read", "read_simple", "list"}:
+            return False  # only GET /api/admins/current is available
     from app.services.principal_pg_authz import (
         is_level1_principal_staff,
         local_safety_allows_pg_action,
