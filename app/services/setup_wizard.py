@@ -36,6 +36,7 @@ WIZARD_ENV_KEYS = (
     "GOGUARD_BASE_URL",
     "GOGUARD_USERNAME",
     "GOGUARD_PASSWORD",
+    "GOGUARD_API_KEY",
     "WEB_HOST",
     "WEB_PORT",
     "WEB_SECRET",
@@ -301,6 +302,7 @@ def _env_get(key: str) -> str:
             "GOGUARD_BASE_URL": settings.goguard_base_url,
             "GOGUARD_USERNAME": settings.goguard_username,
             "GOGUARD_PASSWORD": settings.goguard_password,
+            "GOGUARD_API_KEY": settings.goguard_api_key,
             "WEB_HOST": settings.web_host,
             "WEB_PORT": str(settings.web_port),
             "WEB_SECRET": settings.web_secret,
@@ -612,6 +614,7 @@ def current_setup_values() -> dict[str, str]:
         "GOGUARD_BASE_URL": _env_get("GOGUARD_BASE_URL"),
         "GOGUARD_USERNAME": _env_get("GOGUARD_USERNAME"),
         "GOGUARD_PASSWORD": _env_get("GOGUARD_PASSWORD"),
+        "GOGUARD_API_KEY": _env_get("GOGUARD_API_KEY"),
         "WEB_PORT": _env_get("WEB_PORT") or "9000",
         "PUBLIC_BASE_URL": _env_get("PUBLIC_BASE_URL"),
         "CURRENCY": _env_get("CURRENCY") or "تومان",
@@ -784,18 +787,19 @@ async def setup_pg_access_audit() -> dict[str, Any]:
 
         uname = (values.get("GOGUARD_USERNAME") or "").strip()
         password = (values.get("GOGUARD_PASSWORD") or "").strip()
+        api_key = (values.get("GOGUARD_API_KEY") or "").strip()
         base = normalize_pg_base_url(values.get("GOGUARD_BASE_URL") or "")
-        if not uname or not password or not base:
+        if not base or (not api_key and not (uname and password)):
             return public_pg_access_audit({
                 "ok": False,
-                "error": "اعتبارنامه SolidLayer / GoGuard ناقص است (آدرس، نام کاربری و رمز عبور)",
+                "error": "اعتبارنامه SolidLayer / GoGuard ناقص است (آدرس API و کلید یا نام کاربری/رمز عبور)",
                 "username": uname or None,
             })
         try:
             base = await asyncio.to_thread(assert_safe_pg_base_url, base)
         except UnsafePgUrlError as exc:
             return public_pg_access_audit({"ok": False, "error": str(exc), "username": uname})
-        client = GoGuardClient(username=uname, password=password, base_url=base)
+        client = GoGuardClient(username=uname or None, password=password or None, api_key=api_key or None, base_url=base)
         try:
             await client.ensure_token()
             admin = await client.get_current_admin()
