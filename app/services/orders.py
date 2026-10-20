@@ -2300,6 +2300,17 @@ async def renew_service_with_plan(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
 
+    from app.config import get_settings
+    if get_settings().panel_provider == "goguard":
+        # Catch unsupported on-hold/unknown remaining quotas before customer
+        # pays. A paid order should never be the first compatibility probe.
+        from app.services.pasarguard import get_pg_for_reseller
+        from app.services.service_renewals import calculate_renewal
+
+        client = await get_pg_for_reseller(session, shop_rid) if shop_rid else get_pg()
+        live = await client.get_user_by_id(service.pg_user_id)
+        calculate_renewal(live, terms, provider="goguard")
+
     quote = await quote_product(session, plan, shop_id=shop_rid)
     assert_expected_price(quote, expected_price)
     order = Order(
