@@ -356,7 +356,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         default_url = default_panel_base_url()
         pg_panel_url = await get_reseller_pg_panel_base_url(session)
         custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
-        default_pg_url = normalize_pg_base_url(get_settings().pg_base_url or "")
+        settings_now = get_settings()
+        default_pg_url = normalize_pg_base_url(
+            settings_now.goguard_base_url if settings_now.panel_provider == "goguard"
+            else settings_now.pg_base_url or ""
+        )
         show_reseller_apply = await get_setting(session, "show_reseller_apply", "1")
         try:
             reseller_plans = await list_active_reseller_plans(session)
