@@ -1333,8 +1333,18 @@ sync_code_to_channel() {
     return 0
   fi
   info "Syncing code to origin/${ch}…"
-  git remote get-url origin >/dev/null 2>&1 || \
-    git remote add origin "https://github.com/hazhanhasani/PGClockBot.git" 2>/dev/null || true
+  # Existing installs may still have Mrclocks/PGClockBot as origin. Merely
+  # adding a missing remote is not enough: always pin origin to this fork.
+  local repo_url="https://github.com/hazhanhasani/PGClockBot.git"
+  if git remote get-url origin >/dev/null 2>&1; then
+    if ! git remote set-url origin "$repo_url"; then
+      err "Could not change origin to ${repo_url}; refusing to fetch the old repository."
+      return 1
+    fi
+  elif ! git remote add origin "$repo_url"; then
+    err "Could not add origin ${repo_url}; refusing to fetch from an unknown source."
+    return 1
+  fi
   if ! timeout 120 git fetch --no-tags --prune origin "$ch" 2>/dev/null; then
     err "Could not fetch origin/${ch}. Check network / GitHub access."
     return 1
