@@ -125,7 +125,7 @@ async def _platform_admin_menu_flags(
             feats = await bot_migrated_pg_features(
                 session, db_user, is_reseller_bot=is_reseller_bot
             )
-            can_reps = await platform_can_manage_representatives()
+            can_reps = True  # owner visibility; creation is independently guarded
     except Exception:
         feats = frozenset()
         can_reps = False
