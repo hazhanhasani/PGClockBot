@@ -2,10 +2,10 @@
 # PGClockBot bootstrap — clone if missing, update if present, then open the menu.
 #
 # Fresh or existing server (from any directory):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)
 #
 # Also works (TTY is reattached automatically):
-#   curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh | bash
 #
 # Or locally (inside / next to the repo):
 #   bash get.sh
@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-REPO_URL="${PGCLOCK_REPO:-https://github.com/Mrclocks/PGClockBot.git}"
+REPO_URL="${PGCLOCK_REPO:-https://github.com/hazhanhasani/PGClockBot.git}"
 DIR_NAME="${PGCLOCK_DIR:-PGClockBot}"
 # Channel: main (stable) or dev. PGCLOCK_CHANNEL aliases PGCLOCK_BRANCH.
 CHANNEL_FROM_ENV=0
@@ -161,7 +161,7 @@ ensure_repo() {
       err "Folder exists but is empty/incomplete and has no .git: ${ROOT}"
       err "Remove or rename it, then re-run:"
       err "  mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-      err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
+      err "  bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)"
       exit 1
     else
       warn "Folder exists without .git — re-cloning into place"
@@ -197,7 +197,7 @@ if [[ ! -f pgclock.sh ]]; then
   err "pgclock.sh still missing in ${ROOT}"
   err "Manual fix:"
   err "  cd ~ && mv ${DIR_NAME} ${DIR_NAME}.bak.\$(date +%Y%m%d)"
-  err "  bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)"
+  err "  bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)"
   exit 1
 fi
 
