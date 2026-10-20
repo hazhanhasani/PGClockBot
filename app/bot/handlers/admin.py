@@ -3644,7 +3644,6 @@ async def adm_users_unreseller_reason(
 
 @router.callback_query(F.data == "adm:resellers")
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -3671,7 +3670,6 @@ RESELLERS_PAGE_SIZE = 10
 
 @router.callback_query(F.data.startswith("adm:resellers:list:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -3682,13 +3680,15 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
         page = 0
     page = max(0, page)
     await callback.answer()
+    # Profiles are the authoritative local representative directory. A
+    # restored legacy reseller may have role=user but still own a valid shop.
     total = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.role == Role.RESELLER.value)
+        select(func.count()).select_from(ResellerProfile)
     ) or 0
     result = await session.execute(
         select(BotUser)
-        .where(BotUser.role == Role.RESELLER.value)
-        .order_by(BotUser.id.desc())
+        .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
+        .order_by(ResellerProfile.id.desc())
         .offset(page * RESELLERS_PAGE_SIZE)
         .limit(RESELLERS_PAGE_SIZE)
     )
@@ -3725,6 +3725,13 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
 
 RESELLER_SVCS_PAGE_SIZE = 10
 
+async def _reseller_provisioning_allowed() -> bool:
+    """Live mutation capability (not needed to browse local representatives)."""
+    from app.bot.auth import platform_can_manage_representatives
+
+    return await platform_can_manage_representatives()
+
+
 async def _render_reseller_card(
     message: Message,
     session: AsyncSession,
@@ -3739,6 +3746,7 @@ async def _render_reseller_card(
     shop_svc_count = await session.scalar(
         select(func.count()).select_from(UserService).where(UserService.bot_user_id == user.id)
     ) or 0
+    provider = get_settings().panel_provider
     pg_uname = (profile.pg_admin_username if profile else None) or "—"
     mode = (profile.billing_mode if profile else None) or "fixed"
     active = "فعال" if (profile and profile.is_active) else "غیرفعال"
@@ -3753,17 +3761,23 @@ async def _render_reseller_card(
         f"یوزرنیم: @{html.escape(user.username or '—')}\n"
         f"تگ ریسک: {html.escape(tag_line)}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
-        f"ادمین پاسارگارد: <code>{html.escape(str(pg_uname))}</code>\n"
+        f"ادمین پنل متصل: <code>{html.escape(str(pg_uname))}</code>\n"
         f"حالت پرداخت: {html.escape(mode)}\n"
         f"نمایندگی: {active}{suspended}\n"
         f"ربات اختصاصی: {html.escape(bot_uname)}\n"
         f"سرویس‌های فروشگاه: {shop_svc_count}\n\n"
-        f"<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
+        (
+            "<i>برای GoGuard، دسترسی نمایندگان باید جداگانه در پنل مقصد نگاشت شود.</i>"
+            if provider == "goguard"
+            else "<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
+        )
     )
     markup = kb.admin_reseller_actions(
         user.id,
         has_shop_services=int(shop_svc_count) > 0,
         color_tag=effective_color_tag(user),
+        can_manage=await _reseller_provisioning_allowed(),
+        panel_provider=provider,
     )
     if edit:
         try:
@@ -3775,7 +3789,6 @@ async def _render_reseller_card(
 
 @router.callback_query(F.data.startswith("adm:resellers:view:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers_view(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
@@ -3784,7 +3797,9 @@ async def adm_resellers_view(
         return
     user_id = int(callback.data.split(":")[-1])
     user = await session.get(BotUser, user_id)
-    if not user or user.role != Role.RESELLER.value:
+    from app.services.resellers import get_reseller_profile
+
+    if not user or not await get_reseller_profile(session, int(user.id)):
         await callback.answer("نماینده یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -4140,7 +4155,6 @@ async def adm_reseller_cap_gb_entered(
 
 @router.callback_query(F.data.startswith("adm:resellers:svcs:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers_services(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
@@ -4273,7 +4287,6 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.callback_query(F.data == "adm:resapp:list")
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -4320,7 +4333,6 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.callback_query(F.data.startswith("adm:resapp:view:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
