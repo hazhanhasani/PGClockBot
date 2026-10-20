@@ -165,7 +165,11 @@ async def panel_read_request(
     """
     budget = _BUDGET.get()
     if budget is None:
-        return await client.request(method, url, **kwargs)
+        # BluePanel-style transient recovery is safe only for idempotent GETs.
+        # Web reads keep their strict single-attempt deadline/circuit breaker.
+        from app.services.panel_retry import background_read_request
+
+        return await background_read_request(client, method, url, **kwargs)
     state = _panel_state(str(client.base_url))
     remaining, generation = _claim_read(state, budget)
     try:
