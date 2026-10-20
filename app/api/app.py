@@ -386,33 +386,18 @@ def _cookie_secure(request: Request) -> bool:
 
 
 def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> RedirectResponse:
-    """Redirect using HTTP until HTTPS is live; then use the public HTTPS base.
+    """Keep authenticated navigation on the same browser origin.
 
-    Must never raise — a failure here 500s login/logout landing for every role.
+    Redirecting an HTTP login to a saved PUBLIC_BASE_URL / on-disk HTTPS
+    certificate can send users to a different IP, host, or dead TLS listener
+    (ERR_CONNECTION_CLOSED), even when the login POST itself succeeded.
+    Relative redirects inherit the actual scheme/host/port that served the
+    form and keep the session cookie on that origin. The SSL setup wizard
+    remains responsible for explicit HTTPS transitions.
     """
-    if not path.startswith("/"):
-        path = "/" + path
-    try:
-        from app.services.ssl_certs import https_is_active, public_panel_base_url
-
-        if https_is_active():
-            base = (public_panel_base_url() or "").rstrip("/")
-            if base:
-                return RedirectResponse(f"{base}{path}", status_code=status_code)
-    except Exception:
-        logging.getLogger(__name__).exception("_panel_redirect https probe failed")
-    # Never trust the request Host header for absolute redirects (open-redirect /
-    # cache-poisoning). Prefer configured PUBLIC_BASE_URL, else a relative redirect.
-    try:
-        from app.services.ssl_certs import public_panel_base_url
-
-        base = (public_panel_base_url() or "").rstrip("/")
-        if base:
-            return RedirectResponse(f"{base}{path}", status_code=status_code)
-    except Exception:
-        logging.getLogger(__name__).exception("_panel_redirect public base fallback failed")
+    if not path.startswith("/") or path.startswith("//"):
+        path = "/" + path.lstrip("/")
     return RedirectResponse(path, status_code=status_code)
-
 
 def create_api_app(lifespan=None) -> FastAPI:
     """Build the panel FastAPI app (routing + middleware factory).
