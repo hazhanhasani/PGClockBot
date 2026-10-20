@@ -289,36 +289,38 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 )
         except Exception:
             search_q = (request.query_params.get("q") or "").strip()
-        # One-time PAYG→wallet link; only auto-restore wrongful legacy suspend on first merge
-        try:
-            from app.services.billing import ensure_payg_shop_wallet, is_payg
-            from app.services.billing_suspend import restore_payg_reseller
-
-            touched = False
-            for _user, profile in rows:
-                if not is_payg(profile):
-                    continue
-                was_linked = bool(getattr(profile, "payg_wallet_linked", False))
-                _u, bal = await ensure_payg_shop_wallet(session, profile)
-                touched = True
-                if (
-                    (not was_linked)
-                    and bal > 0
-                    and profile.billing_suspended_at is not None
-                ):
-                    try:
-                        await restore_payg_reseller(session, profile, commit=False)
-                    except Exception:
-                        logging.getLogger(__name__).debug(
-                            "list auto-restore failed", exc_info=True
-                        )
-            if touched:
-                await session.commit()
-        except Exception:
+        # A read-only fallback must not have billing side effects on GET.
+        if can_manage_reps:
+            # One-time PAYG→wallet link; only auto-restore wrongful legacy suspend on first merge
             try:
-                await session.rollback()
+                from app.services.billing import ensure_payg_shop_wallet, is_payg
+                from app.services.billing_suspend import restore_payg_reseller
+    
+                touched = False
+                for _user, profile in rows:
+                    if not is_payg(profile):
+                        continue
+                    was_linked = bool(getattr(profile, "payg_wallet_linked", False))
+                    _u, bal = await ensure_payg_shop_wallet(session, profile)
+                    touched = True
+                    if (
+                        (not was_linked)
+                        and bal > 0
+                        and profile.billing_suspended_at is not None
+                    ):
+                        try:
+                            await restore_payg_reseller(session, profile, commit=False)
+                        except Exception:
+                            logging.getLogger(__name__).debug(
+                                "list auto-restore failed", exc_info=True
+                            )
+                if touched:
+                    await session.commit()
             except Exception:
-                pass
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
         roles = []
         reseller_usage: dict = {}
         if owner_view and provider == "pasarguard":
