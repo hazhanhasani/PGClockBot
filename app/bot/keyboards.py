@@ -2035,31 +2035,28 @@ def admin_reseller_actions(
     *,
     has_shop_services: bool = False,
     color_tag: str | None = None,
+    can_manage: bool = True,
+    panel_provider: str = "pasarguard",
 ) -> InlineKeyboardMarkup:
     """Reseller card actions — PG-owned services are primary; optional shop UserServices link."""
     from app.services.color_tags import bot_tag_button_label
 
     tag_label = bot_tag_button_label(color_tag)
-    rows: list[list[InlineKeyboardButton]] = [
-        [
+    rows: list[list[InlineKeyboardButton]] = []
+    # GoGuard exposes only current-admin, not an all-admin directory; never
+    # send a customer into a PasarGuard-only reseller service mutation screen.
+    if panel_provider == "pasarguard":
+        rows.append([
             InlineKeyboardButton(
                 text="📦 سرویس‌های پاسارگارد",
                 callback_data=f"adm:resellers:svcs:{user_id}",
             )
-        ],
-        [
-            InlineKeyboardButton(
-                text="⏱ تغییر ظرفیت",
-                callback_data=f"adm:resellers:capadj:{user_id}",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"🏷 تگ: {tag_label}"[:64],
-                callback_data=f"adm:resellers:tag:{user_id}",
-            )
-        ],
-    ]
+        ])
+    if can_manage:
+        rows.extend([
+            [InlineKeyboardButton(text="⏱ تغییر ظرفیت", callback_data=f"adm:resellers:capadj:{user_id}")],
+            [InlineKeyboardButton(text=f"🏷 تگ: {tag_label}"[:64], callback_data=f"adm:resellers:tag:{user_id}")],
+        ])
     if has_shop_services:
         rows.append(
             [
@@ -2069,14 +2066,13 @@ def admin_reseller_actions(
                 )
             ]
         )
-    rows.append(
-        [
-            InlineKeyboardButton(
+    if can_manage:
+        rows.append(
+            [InlineKeyboardButton(
                 text="🤝 حذف نمایندگی",
                 callback_data=f"adm:users:unres:{user_id}",
-            )
-        ]
-    )
+            )]
+        )
     rows.append(
         [back_button(None, "adm:resellers:list:0")]
     )
