@@ -138,9 +138,11 @@ PANEL_PROVIDER="goguard"
 GOGUARD_BASE_URL="https://app.solidlayerco.com"
 GOGUARD_USERNAME="your-admin"
 GOGUARD_PASSWORD="your-password"
+# Alternative to username/password: X-API-Key
+GOGUARD_API_KEY="your-goguard-api-key"
 ```
 
-آدرس باید ریشهٔ API باشد، نه `/docs/index.html`. احراز هویت GoGuard با نام کاربری و رمز عبور و مسیر `POST /api/admins/token` انجام می‌شود؛ کلید API پاسارگارد برای این اتصال قابل استفاده نیست.
+آدرس باید ریشهٔ API باشد، نه `/docs/index.html`. GoGuard دو روش احراز هویت دارد: نام کاربری/رمز از مسیر `POST /api/admins/token`، یا کلید API اختصاصی از هدر `X-API-Key`. در صورت تعریف کلید API، همان روش اولویت دارد. کلید API پاسارگارد برای این اتصال قابل استفاده نیست.
 
 قابلیت‌های متصل‌شده شامل فهرست و ساخت/ویرایش/حذف اشتراک‌ها، فعال/غیرفعال‌کردن، تمدید حجم و زمان، لغو و بازنشانی اشتراک، خواندن سرویس‌ها و آمار است. شناسه‌های سرویس GoGuard در فیلد انتخاب گروه پلن‌های فعلی نگهداری می‌شوند.
 
