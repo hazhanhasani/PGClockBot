@@ -17,6 +17,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
@@ -822,13 +823,24 @@ async def _open_main_bot_reseller_hub(
         logger.warning("reseller hub pg gate failed", exc_info=True)
         show_pg = False
     ui = await get_all_settings(session)
+    text = format_message(
+        screen_title_html(ui, "r.home"), screen_caption(ui, "r.home")
+    )
+    try:
+        from app.services.home_overview import reseller_shop_summary
+        from app.services.reseller_bot_dashboard import format_reseller_shop_kpis
+
+        metrics = await reseller_shop_summary(session, int(owner_id))
+        text += "\n\n" + format_reseller_shop_kpis(
+            metrics, currency=get_settings().currency
+        )
+    except Exception:
+        logger.warning("main bot reseller KPIs unavailable shop=%s", owner_id, exc_info=True)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
     await present_nav_panel(
         message,
-        text=format_message(
-            screen_title_html(ui, "r.home"), screen_caption(ui, "r.home")
-        ),
+        text=text,
         inline=reseller_main_bot_hub_keyboard(profile, ui, show_pg=show_pg),
         state=state,
     )
@@ -859,6 +871,16 @@ async def open_reseller_home(
         return
     ui, queue = hub.ui, hub.queue
     body = format_message(screen_title_html(ui, "r.home"), screen_caption(ui, "r.home"))
+    try:
+        from app.services.home_overview import reseller_shop_summary
+        from app.services.reseller_bot_dashboard import format_reseller_shop_kpis
+
+        metrics = await reseller_shop_summary(session, int(reseller_owner_id))
+        body += "\n\n" + format_reseller_shop_kpis(
+            metrics, currency=get_settings().currency
+        )
+    except Exception:
+        logger.warning("shop bot reseller KPIs unavailable shop=%s", reseller_owner_id, exc_info=True)
     queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
