@@ -280,6 +280,12 @@
               {% if goguard_api_key_ready %}<span class="badge approved">کلید GoGuard ذخیره‌شده</span>{% endif %}
             </small>
           </label>
+          {% if goguard_api_key_ready %}
+          <label><span class="ui-check">
+            <input type="checkbox" name="clear_goguard_api_key" value="1" />
+            حذف کلید GoGuard و استفاده از ورود با رمز
+          </span></label>
+          {% endif %}
         </div>
         <div class="setting-item full">
           <div class="flash warn">
