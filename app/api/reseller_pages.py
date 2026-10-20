@@ -198,17 +198,24 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             RepresentativeUnifyError,
             assert_live_parent_for_child,
             descendant_shop_profile_ids,
+            staff_can_view_representatives,
+            staff_can_manage_representatives,
         )
         from app.services.setup_wizard import default_panel_base_url
         from app.services.users import get_setting
         from fastapi import HTTPException
 
-        try:
-            await assert_live_parent_for_child(session, staff)
-        except RepresentativeUnifyError:
+        if not staff_can_view_representatives(staff):
             raise HTTPException(status_code=403, detail="forbidden")
-
         owner_view = is_explicit_owner_staff(staff)
+        # Owner's read access must not depend on GoGuard's missing admins.create.
+        # Non-owners still need their full parent/scope verification.
+        if not owner_view:
+            try:
+                await assert_live_parent_for_child(session, staff)
+            except RepresentativeUnifyError:
+                raise HTTPException(status_code=403, detail="forbidden")
+        can_manage_reps = staff_can_manage_representatives(staff)
         l2_pg_roles: list[dict] = []
         if not owner_view:
             try:
@@ -281,7 +288,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             from app.services.billing_suspend import restore_payg_reseller
 
             touched = False
-            for _user, profile in rows:
+            for _user, profile in (rows if can_manage_reps else []):
                 if not is_payg(profile):
                     continue
                 was_linked = bool(getattr(profile, "payg_wallet_linked", False))
@@ -307,7 +314,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 pass
         roles = []
         reseller_usage: dict = {}
-        if owner_view:
+        if owner_view and can_manage_reps:
             try:
                 roles = await get_pg().get_admin_roles()
             except Exception:
@@ -349,7 +356,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         default_url = default_panel_base_url()
         pg_panel_url = await get_reseller_pg_panel_base_url(session)
         custom_pg_url = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
-        default_pg_url = normalize_pg_base_url(get_settings().pg_base_url or "")
+        settings_now = get_settings()
+        default_pg_url = normalize_pg_base_url(
+            settings_now.goguard_base_url if settings_now.panel_provider == "goguard"
+            else settings_now.pg_base_url or ""
+        )
         show_reseller_apply = await get_setting(session, "show_reseller_apply", "1")
         try:
             reseller_plans = await list_active_reseller_plans(session)
@@ -381,7 +392,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "open_edit": request.query_params.get("edit"),
                 "q": search_q,
                 "owner_view": owner_view,
-                "can_create_l2": not owner_view,
+                "can_manage_reps": can_manage_reps,
+                "can_create_l2": not owner_view and can_manage_reps,
                 "l2_pg_roles": l2_pg_roles,
                 "color_filter": color_filter,
                 "color_tags": color_tags_for_ui(),
@@ -790,6 +802,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         form = await request.form()
         user = await session.get(BotUser, user_id)
         profile = (
@@ -927,6 +942,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         user = await session.get(BotUser, user_id)
         profile = (
             await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
@@ -961,6 +979,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         from app.services.platform_identity import is_explicit_owner_staff
         from app.services.reseller_capacity_view import sync_reseller_capacity
 
@@ -986,6 +1007,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         form = await request.form()
         from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
 
@@ -1044,6 +1068,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         form = await request.form()
         role = str(form.get("role") or "").strip()
         user = await session.get(BotUser, user_id)
@@ -1138,6 +1165,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
+        if get_settings().panel_provider == "goguard":
+            _require_rep_mgmt(staff)  # unsupported panel admin mutation
+
         """Full bot-user delete from resellers tab (same cascade as /users delete)."""
         form = await request.form()
         from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
@@ -1752,12 +1782,18 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        _require_rep_mgmt(staff)
+        from app.services.representative_unification import staff_can_view_representatives
+        from fastapi import HTTPException
+
+        if not staff_can_view_representatives(staff):
+            raise HTTPException(status_code=403, detail="forbidden")
         from app.services.resellers import release_stale_pending_payment_apps
 
-        released = await release_stale_pending_payment_apps(session)
-        if released:
-            await session.commit()
+        from app.services.representative_unification import staff_can_manage_representatives
+        if staff_can_manage_representatives(staff):
+            released = await release_stale_pending_payment_apps(session)
+            if released:
+                await session.commit()
         apps = await list_applications(session)
         return render(
             request,
@@ -1767,6 +1803,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "apps": apps,
                 "tabs": _tabs("apps"),
                 "tab": "apps",
+                "can_manage_reps": staff_can_manage_representatives(staff),
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },

@@ -3644,7 +3644,6 @@ async def adm_users_unreseller_reason(
 
 @router.callback_query(F.data == "adm:resellers")
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -3671,7 +3670,6 @@ RESELLERS_PAGE_SIZE = 10
 
 @router.callback_query(F.data.startswith("adm:resellers:list:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -3760,11 +3758,20 @@ async def _render_reseller_card(
         f"سرویس‌های فروشگاه: {shop_svc_count}\n\n"
         f"<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
     )
-    markup = kb.admin_reseller_actions(
-        user.id,
-        has_shop_services=int(shop_svc_count) > 0,
-        color_tag=effective_color_tag(user),
-    )
+    from app.bot.auth import platform_can_manage_representatives
+
+    if await platform_can_manage_representatives():
+        markup = kb.admin_reseller_actions(
+            user.id,
+            has_shop_services=int(shop_svc_count) > 0,
+            color_tag=effective_color_tag(user),
+        )
+    else:
+        # Read-only when GoGuard lacks admin mutations; do not advertise
+        # quota/delete/role operations that cannot be fulfilled.
+        markup = InlineKeyboardMarkup(inline_keyboard=[
+            [kb.back_button(None, "adm:resellers:list:0")]
+        ])
     if edit:
         try:
             await message.edit_text(text, reply_markup=markup)
@@ -3775,7 +3782,6 @@ async def _render_reseller_card(
 
 @router.callback_query(F.data.startswith("adm:resellers:view:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resellers_view(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
 ):
@@ -4273,7 +4279,6 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
 
 @router.callback_query(F.data == "adm:resapp:list")
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
@@ -4283,9 +4288,12 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
 
     await callback.answer()
     # Heal orphan pending_payment rows (order already cancelled) so the list matches reality.
-    released = await release_stale_pending_payment_apps(session)
-    if released:
-        await session.commit()
+    from app.bot.auth import platform_can_manage_representatives
+
+    if await platform_can_manage_representatives():
+        released = await release_stale_pending_payment_apps(session)
+        if released:
+            await session.commit()
     apps = await list_open_applications(session, limit=20)
     if not apps:
         if callback.message:
@@ -4320,8 +4328,9 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
 
 @router.callback_query(F.data.startswith("adm:resapp:view:"))
 @require_bot_owner_handler
-@require_platform_rep_mgmt
 async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.bot.auth import platform_can_manage_representatives
+
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
@@ -4364,7 +4373,10 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.message.edit_text(
             text,
             reply_markup=with_inline_back(
-                kb.reseller_app_review(app.id, allow_approve=not pending_pay), None, RESELLER_APPS_LIST
+                (kb.reseller_app_review(app.id, allow_approve=not pending_pay)
+                 if await platform_can_manage_representatives()
+                 else InlineKeyboardMarkup(inline_keyboard=[])),
+                None, RESELLER_APPS_LIST
             ),
         )
 

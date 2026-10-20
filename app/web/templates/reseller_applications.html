@@ -14,20 +14,25 @@
   {% endfor %}
 </div>
 
+{% if not can_manage_reps %}
+<div class="flash warn" role="status">🔒 درخواست‌ها در حالت مشاهده هستند؛ پنل GoGuard امکان ساخت ادمین نمایندگی از طریق API را ندارد.</div>
+{% endif %}
 <div class="card card-flush">
+{% if can_manage_reps %}
   {{ table_bulk_bar('/resellers/applications/bulk-action', [
     {'key': 'approve', 'label': 'تأیید', 'class': 'btn-ok', 'confirm': '{n} درخواست تأیید شوند؟', 'confirm_title': 'تأیید گروهی', 'confirm_label': 'تأیید'},
     {'key': 'reject', 'label': 'رد', 'class': 'btn-danger', 'confirm': '{n} درخواست رد شوند؟', 'confirm_title': 'رد گروهی', 'confirm_label': 'رد', 'danger': true},
   ]) }}
+{% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-bulk-select>
+  <table class="table-compact"{% if can_manage_reps %} data-bulk-select{% endif %}>
     <thead>
-      <tr>{{ table_select_head() }}<th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{% if can_manage_reps %}{{ table_select_head() }}{% endif %}<th class="col-id">#</th><th class="col-user">کاربر</th><th class="col-hide-sm col-name">پلن</th><th class="col-amount">مبلغ</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for a in apps %}
-      <tr data-bulk-ops="{% if a.status == 'awaiting_approval' %}approve,reject{% elif a.status == 'pending_payment' %}reject{% endif %}">
-        {{ table_select_cell(a.id) }}
+      <tr data-bulk-ops="{% if can_manage_reps and a.status == 'awaiting_approval' %}approve,reject{% elif can_manage_reps and a.status == 'pending_payment' %}reject{% endif %}">
+        {% if can_manage_reps %}{{ table_select_cell(a.id) }}{% endif %}
         <td class="mono">{{ a.id }}</td>
         <td>
           {{ a.user.full_name or a.user.username or '—' if a.user else '—' }}
@@ -44,7 +49,8 @@
           {% else %}<span class="badge">{{ a.status }}</span>{% endif %}
         </td>
         <td class="col-actions">
-          {% if a.status == 'awaiting_approval' %}
+          {% if not can_manage_reps %}<span class="muted">فقط مشاهده</span>
+          {% elif a.status == 'awaiting_approval' %}
           {% call row_actions() %}
           <form method="post" action="/resellers/applications/{{ a.id }}/approve" data-confirm="این درخواست نمایندگی تأیید شود؟" data-confirm-title="تأیید درخواست" data-confirm-label="تأیید"><button class="btn btn-sm" type="submit">تأیید</button></form>
           <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="این درخواست رد شود؟" data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
@@ -59,7 +65,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="muted">درخواستی نیست</td></tr>
+      <tr><td colspan="{{ 7 if can_manage_reps else 6 }}" class="muted">درخواستی نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -25,6 +25,12 @@ def register_reseller_capacity_repair_pages(app: FastAPI, *, require_staff: Call
     ) -> RedirectResponse:
         if not is_explicit_owner_staff(staff):
             return redirect_bulk(LIST_URL, err=DENIED)
+        from app.config import get_settings
+        if get_settings().panel_provider == "goguard":
+            return redirect_bulk(
+                LIST_URL,
+                err="همگام‌سازی ظرفیت نمایندگی از ادمین‌های پاسارگارد در GoGuard پشتیبانی نمی‌شود",
+            )
         report = await repair_current_capacity_snapshots(session)
         text = f"{report.fixed} نماینده اصلاح شد"
         if report.unreadable:

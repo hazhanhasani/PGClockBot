@@ -69,14 +69,18 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
         "commercial_reseller": False,
         "can_add_representative": False,
         "can_manage_representatives": False,
+        "can_view_representatives": False,
     }
     if not staff:
         return empty
 
     from app.services.platform_identity import is_explicit_owner_staff
-    from app.services.representative_unification import staff_can_manage_representatives
+    from app.services.representative_unification import (
+        staff_can_manage_representatives, staff_can_view_representatives,
+    )
 
     can_manage = staff_can_manage_representatives(staff)
+    can_view = staff_can_view_representatives(staff)
     can_add = (not is_explicit_owner_staff(staff)) and can_manage
 
     if is_explicit_owner_staff(staff):
@@ -89,6 +93,7 @@ def hierarchy_identity(staff: Mapping[str, Any] | None) -> dict[str, Any]:
             "commercial_reseller": False,
             "can_add_representative": False,
             "can_manage_representatives": can_manage,
+            "can_view_representatives": can_view,
         }
 
     role = str(staff.get("role") or "").strip()

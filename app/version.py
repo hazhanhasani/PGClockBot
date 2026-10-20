@@ -1,6 +1,6 @@
 """App version — bump when releasing so the panel can detect updates."""
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 # GitHub repo used for update checks
 GITHUB_REPO = "hazhanhasani/PGClockBot"

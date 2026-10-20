@@ -122,10 +122,13 @@ async def _platform_admin_menu_flags(
         if await is_bot_owner_principal(
             session, db_user, is_reseller_bot=is_reseller_bot
         ):
-            feats = await bot_migrated_pg_features(
-                session, db_user, is_reseller_bot=is_reseller_bot
-            )
-            can_reps = await platform_can_manage_representatives()
+            can_reps = True  # verified owner can view local shops even if panel offline
+            try:
+                feats = await bot_migrated_pg_features(
+                    session, db_user, is_reseller_bot=is_reseller_bot
+                )
+            except Exception:
+                feats = frozenset()  # do not infer PasarGuard/GoGuard permissions
     except Exception:
         feats = frozenset()
         can_reps = False
@@ -221,8 +224,11 @@ async def build_main_reply_keyboard(
 
     # Apply CTA is for normal customers only. Admins/resellers already staff;
     # preview (as_user) still shows it so the customer menu looks accurate.
+    from app.config import get_settings
+
     show_apply = (
-        not is_reseller_bot
+        get_settings().panel_provider != "goguard"
+        and not is_reseller_bot
         and _setting_on(ui.get("show_reseller_apply"))
         and "reseller_apply" in set(kb._menu_order(ui))
         and (as_user or role == "user")

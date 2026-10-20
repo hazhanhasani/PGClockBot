@@ -200,7 +200,7 @@
           </a>
           {% endif %}
           {% if is_owner %}
-          {% if ident.can_manage_representatives %}
+          {% if ident.can_view_representatives or ident.can_manage_representatives %}
           <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
             <span>نمایندگان</span>

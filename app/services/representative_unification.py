@@ -51,9 +51,24 @@ def staff_is_sub_representative(staff: Mapping[str, Any] | None) -> bool:
         return False
 
 
+def staff_can_view_representatives(staff: Mapping[str, Any] | None) -> bool:
+    """Distinguish owner's local reporting access from panel admin provisioning.
+
+    GoGuard cannot create additional panel admins, but the active Org Owner
+    must still be able to see their existing local shops and applications.
+    This is NOT a write capability; routes must use the write gate separately.
+    """
+    return bool(staff) and (
+        is_explicit_owner_staff(staff) or staff_can_manage_representatives(staff)
+    )
+
+
 def staff_can_manage_representatives(staff: Mapping[str, Any] | None) -> bool:
-    """Owner with PG admin-create, or active Representative with real ``admins.create``."""
+    """Real PG admins.create capability; never expose GoGuard unsupported writes."""
     if not staff:
+        return False
+    from app.config import get_settings
+    if get_settings().panel_provider == "goguard":
         return False
     if staff_is_sub_representative(staff):
         return False
