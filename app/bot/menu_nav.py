@@ -221,8 +221,11 @@ async def build_main_reply_keyboard(
 
     # Apply CTA is for normal customers only. Admins/resellers already staff;
     # preview (as_user) still shows it so the customer menu looks accurate.
+    from app.config import get_settings
+
     show_apply = (
-        not is_reseller_bot
+        get_settings().panel_provider != "goguard"
+        and not is_reseller_bot
         and _setting_on(ui.get("show_reseller_apply"))
         and "reseller_apply" in set(kb._menu_order(ui))
         and (as_user or role == "user")
