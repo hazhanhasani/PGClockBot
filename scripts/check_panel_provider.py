@@ -10,6 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from pathlib import Path
+
+# Executing "python scripts/check_panel_provider.py" sets sys.path[0] to
+# scripts/, not the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings
 from app.services.pasarguard import get_pg
