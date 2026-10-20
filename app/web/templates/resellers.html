@@ -10,13 +10,19 @@
     {{ page_title('users', 'نمایندگان من', help='resellers') }}
     {% endif %}
   </div>
-  {% if owner_view %}
+  {% if owner_view and can_manage_reps %}
   <button type="button" class="btn" data-modal-open="modal-reseller-create">افزودن نماینده</button>
   {% elif can_create_l2 %}
   <button type="button" class="btn" data-modal-open="modal-reseller-create-child">افزودن نماینده</button>
   {% endif %}
 </div>
 
+{% if owner_view and not can_manage_reps %}
+<div class="flash warn" role="status">
+  <strong>مدیریت نمایندگان — حالت مشاهده</strong>
+  <p>فهرست نمایندگان و درخواست‌ها قابل بررسی است؛ اما پنل فعال GoGuard امکان ساخت یا تغییر ادمین نمایندگی را از طریق API ارائه نمی‌دهد. برای عملیات ساخت/حذف ادمین باید ابتدا در پنل مقصد پشتیبانی لازم فراهم شود. هیچ تغییر خودکاری روی نمایندگان موجود انجام نمی‌شود.</p>
+</div>
+{% endif %}
 {% if owner_view %}
 <div class="section-tabs">
   {% for t in tabs %}
@@ -133,14 +139,14 @@
     </label>
     {% endif %}
   </form>
-  {% if owner_view %}
+  {% if owner_view and can_manage_reps %}
   {{ table_bulk_bar('/resellers/bulk-action', [
     {'key': 'delete_reseller', 'label': 'حذف نمایندگی', 'class': 'btn-danger', 'confirm': '{n} نمایندگی حذف شوند؟ ادمین پاسارگارد متصل هم حذف می‌شود.', 'confirm_title': 'حذف نمایندگی گروهی', 'confirm_label': 'حذف نمایندگی', 'danger': true, 'reason': true, 'reason_label': 'علت حذف نمایندگی'},
     {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true, 'reason': true, 'reason_label': 'علت حذف کامل'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
-  <table class="table-compact" data-sortable{% if owner_view %} data-bulk-select{% endif %}>
+  <table class="table-compact" data-sortable{% if owner_view and can_manage_reps %} data-bulk-select{% endif %}>
     <thead>
       <tr>
         {% if owner_view %}{{ table_select_head() }}{% endif %}
@@ -160,7 +166,7 @@
     <tbody>
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
-      <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
+      <tr{% if owner_view %} data-bulk-ops="{% if can_manage_reps %}delete_reseller,delete_user{% endif %}"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
         <td data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
@@ -209,7 +215,7 @@
         <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
           {% call row_actions() %}
-          {% if owner_view %}
+          {% if owner_view and can_manage_reps %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-edit"
                     data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
@@ -238,10 +244,12 @@
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
           {% endif %}
+            {% if can_manage_reps %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-color"
                     data-edit-url="/resellers/{{ u.id }}/color-tag?fragment=1"
                     data-edit-title="تگ ریسک #{{ u.id }}">تگ ریسک</button>
+            {% endif %}
           {% endcall %}
         </td>
       </tr>
@@ -253,7 +261,7 @@
   </div>
 </div>
 
-{% if owner_view %}
+{% if owner_view and can_manage_reps %}
 <div class="ui-modal" id="modal-reseller-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
