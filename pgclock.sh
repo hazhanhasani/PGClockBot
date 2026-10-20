@@ -1324,7 +1324,7 @@ sync_code_to_channel() {
   fi
   info "Syncing code to origin/${ch}…"
   git remote get-url origin >/dev/null 2>&1 || \
-    git remote add origin "https://github.com/Mrclocks/PGClockBot.git" 2>/dev/null || true
+    git remote add origin "https://github.com/hazhanhasani/PGClockBot.git" 2>/dev/null || true
   if ! timeout 120 git fetch --no-tags --prune origin "$ch" 2>/dev/null; then
     err "Could not fetch origin/${ch}. Check network / GitHub access."
     return 1
@@ -2075,7 +2075,7 @@ cmd_uninstall() {
   printf '%s==========================================%s\n' "$G" "$N" > /dev/tty
   printf '  Removed: %s\n' "$root" > /dev/tty
   printf '  Reinstall:\n' > /dev/tty
-  printf '    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)\n' > /dev/tty
+  printf '    bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)\n' > /dev/tty
   printf '%s==========================================%s\n\n' "$G" "$N" > /dev/tty
   exit 0
 }
@@ -2234,8 +2234,8 @@ cmd_help() {
     sudo bash scripts/install_global_cli.sh
 
   One-liner (clone OR update existing folder, then menu):
-    bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
-    PGCLOCK_BRANCH=dev bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/dev/get.sh)
+    bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)
+    PGCLOCK_BRANCH=dev bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/dev/get.sh)
 
   Inside the project:
     bash get.sh
