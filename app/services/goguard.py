@@ -86,7 +86,11 @@ def _normalize_subscription(raw: dict[str, Any]) -> dict[str, Any]:
     used = _as_int(raw.get("total_usage"))
     if used is None:
         used = _as_int(raw.get("current_usage")) or 0
-    expire_raw = raw.get("expired_at") or raw.get("limit_expire")
+    # expired_at is the *actual time a subscription expired*, not the
+    # configured expiry target. Prefer the epoch limit_expire field.
+    expire_raw = raw.get("limit_expire")
+    if expire_raw in (None, ""):
+        expire_raw = raw.get("expired_at")
     expire_epoch = _to_epoch(expire_raw)
     enabled = raw.get("enabled") is not False
     if not enabled:
@@ -127,6 +131,9 @@ def _normalize_subscription(raw: dict[str, Any]) -> dict[str, Any]:
 def _normalize_admin(raw: dict[str, Any]) -> dict[str, Any]:
     """Map GoGuard owner/seller metadata without discarding native role fields."""
     admin = dict(raw)
+    # Current-admin responses may include a persistent API key. Never leak
+    # credentials into panel templates, logs, or capability responses.
+    admin.pop("api_key", None)
     role_raw = raw.get("role")
     role_data = dict(role_raw) if isinstance(role_raw, dict) else {}
     if isinstance(role_raw, dict):
@@ -275,23 +282,24 @@ class GoGuardClient(PasarGuardClient):
         base_url: str | None = None,
     ) -> None:
         settings = get_settings()
-        if api_key:
-            raise PasarGuardError(
-                "GoGuard احراز هویت با نام کاربری و رمز عبور دارد؛ کلید API پاسارگارد قابل استفاده نیست"
-            )
         resolved_username = settings.goguard_username if username is None else username
         resolved_password = settings.goguard_password if password is None and username is None else password
         resolved_base = settings.goguard_base_url if base_url is None else base_url
+        # Swagger securityDefinitions: X-API-Key. When an explicit GoGuard key
+        # is absent, authenticate at POST /api/admins/token using credentials.
+        # Never inherit PasarGuard's PG_API_KEY or PG_ACCESS_TOKEN.
+        resolved_api_key = (
+            settings.goguard_api_key if api_key is None and username is None else api_key
+        )
         super().__init__(
             username=resolved_username,
             password=resolved_password,
             access_token=access_token,
-            api_key=None,
+            api_key=resolved_api_key or None,
             base_url=resolved_base,
         )
-        # Never inherit PasarGuard's PG_ACCESS_TOKEN or PG_API_KEY for GoGuard.
-        self._api_key = None
-        self._token = access_token or None
+        self._api_key = (resolved_api_key or "").replace("\r", "").strip() or None
+        self._token = None if self._api_key else (access_token or None)
         self._login_username = (resolved_username or "").strip() or None
         self._login_password = (resolved_password or "").replace("\r", "").strip() or None
         self._id_username_cache: dict[int, str] = {}
@@ -304,13 +312,16 @@ class GoGuardClient(PasarGuardClient):
         self._api_base_resolved = True
 
     async def ensure_token(self) -> str:
+        if self._api_key:
+            await self._ensure_api_base()
+            return "__apikey__"
         if self._token:
             return self._token
         await self._ensure_api_base()
         username = (self._login_username or "").strip()
         password = (self._login_password or "").strip()
         if not username or not password:
-            raise PasarGuardError("نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است")
+            raise PasarGuardError("نام کاربری/رمز عبور یا کلید API پنل SolidLayer / GoGuard الزامی است")
         try:
             response = await panel_read_request(
                 self._client, "POST", "/api/admins/token",
