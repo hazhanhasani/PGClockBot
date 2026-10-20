@@ -1,9 +1,9 @@
 """App version — bump when releasing so the panel can detect updates."""
 
-__version__ = "0.4.21"
+__version__ = "0.5.0"
 
 # GitHub repo used for update checks
-GITHUB_REPO = "Mrclocks/PGClockBot"
+GITHUB_REPO = "hazhanhasani/PGClockBot"
 # Defaults point at main (stable). Channel-aware callers use
 # ``app.services.update_channel.github_version_url`` / ``github_release_notes_url``.
 GITHUB_VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/VERSION"
