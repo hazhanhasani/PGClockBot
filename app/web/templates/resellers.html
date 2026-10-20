@@ -38,6 +38,7 @@
     نمایش درخواست نمایندگی فقط در ربات اصلی اثر دارد.
   </p>
   <form method="post" action="/resellers/panel-url" class="form-stack" id="reseller-urls-form">
+    {% if active_panel_provider() != 'goguard' %}
     <div class="ui-switch-list">
       {{ switch(
         'show_reseller_apply',
@@ -46,6 +47,7 @@
         help='دکمه درخواست نمایندگی در منوی کاربران عادی ربات اصلی'
       ) }}
     </div>
+    {% endif %}
     <label class="form-field">آدرس وب‌پنل ربات (نماینده)
       <input name="reseller_panel_base_url"
              value="{{ custom_panel_url or '' }}"
@@ -64,6 +66,7 @@
         <span>پیش‌فرض: <code dir="ltr">{{ default_panel_url }}</code></span>
       </small>
     </label>
+    {% if active_panel_provider() != 'goguard' %}
     <label class="form-field">آدرس پنل پاسارگارد
       <input name="reseller_pg_panel_base_url"
              value="{{ custom_pg_panel_url or '' }}"
@@ -82,6 +85,9 @@
         <span>پیش‌فرض: <code dir="ltr">{{ default_pg_panel_url or '— تنظیم نشده —' }}</code></span>
       </small>
     </label>
+    {% else %}
+    <p class="muted">🌐 آدرس پنل فعال GoGuard: <code dir="ltr">{{ pg_panel_url or '— تنظیم نشده —' }}</code>. این آدرس از تنظیمات اصلی پنل خوانده می‌شود.</p>
+    {% endif %}
     <div class="actions">
       <button class="btn" type="submit">ذخیره تنظیمات</button>
       {% if custom_panel_url or custom_pg_panel_url %}
