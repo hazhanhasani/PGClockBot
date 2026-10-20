@@ -990,10 +990,8 @@ def _new_pg_client(**kwargs: Any) -> PasarGuardClient:
     if get_settings().panel_provider == "goguard":
         from app.services.goguard import GoGuardClient
 
-        if kwargs.get("api_key"):
-            raise PasarGuardError(
-                "GoGuard از احراز هویت با API key پاسارگارد پشتیبانی نمی‌کند؛ رمز ادمین لازم است"
-            )
+        # The GoGuard adapter handles its own API key and JWT. Never pull
+        # PG_API_KEY from PasarGuard settings for GoGuard.
         return GoGuardClient(**kwargs)
     return PasarGuardClient(**kwargs)
 
