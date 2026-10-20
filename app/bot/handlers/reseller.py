@@ -319,14 +319,38 @@ async def res_dash(
     users_n, orders_n = summary["users"], summary["orders"]
     pending_pay, open_tickets = summary["pending"], summary["tickets"]
     text = (
-        "🏠 <b>خانه نماینده</b>\n\n"
-        f"👥 مشتریان: {users_n}\n"
-        f"🛒 سفارش‌ها: {orders_n}\n"
-        f"🧾 رسید در انتظار: {pending_pay}\n"
-        f"🎫 تیکت باز: {open_tickets}"
+        "🏪 <b>مرکز مدیریت فروشگاه</b>\n"
+        "━━━━━━━━━━━━━━\n"
+        f"👥 <b>مشتریان:</b> {users_n}\n"
+        f"🛍 <b>سفارش‌ها:</b> {orders_n}\n"
+        f"💳 <b>پرداخت‌های منتظر بررسی:</b> {pending_pay}\n"
+        f"🎫 <b>تیکت‌های باز:</b> {open_tickets}\n"
+        "━━━━━━━━━━━━━━\n"
+        "برای رسیدگی، بخش موردنظر را انتخاب کنید."
     )
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    rows: list[list[InlineKeyboardButton]] = []
+    if has_bot_perm(profile, "dashboard"):
+        rows.append([InlineKeyboardButton(text="👥 مشتریان", callback_data="res:users:0")])
+    if has_bot_perm(profile, "orders"):
+        rows.append([InlineKeyboardButton(
+            text=f"🛍 سفارش‌ها ({orders_n})", callback_data="res:orders"
+        )])
+    if has_bot_perm(profile, "payments"):
+        rows.append([InlineKeyboardButton(
+            text=f"💳 بررسی پرداخت‌ها ({pending_pay})", callback_data="res:payments"
+        )])
+    if has_bot_perm(profile, "tickets"):
+        rows.append([InlineKeyboardButton(
+            text=f"🎫 پشتیبانی ({open_tickets})", callback_data="res:tickets"
+        )])
+    rows.append([kb.back_button(None, "res:home")])
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=_group_back("res_dash"))
+        await safe_edit_text(
+            callback.message, text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 RES_USERS_PAGE = 10
