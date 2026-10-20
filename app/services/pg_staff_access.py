@@ -153,7 +153,14 @@ async def _detach_pg_staff_fk_deps(session: AsyncSession, staff_id: int) -> None
 
 
 async def purge_orphaned_staff_access(session: AsyncSession) -> int:
-    """Delete PgStaffAccess rows whose PG admin no longer exists in PasarGuard."""
+    """Delete orphaned PasarGuard staff, never GoGuard staff without full enumeration."""
+    from app.config import get_settings
+
+    if get_settings().panel_provider == "goguard":
+        # GoGuard only exposes GET /api/admins/current (not the full admin
+        # directory). Using its one result as an exhaustive list would
+        # mistakenly revoke every other local staff record.
+        return 0
     rows = await list_access_rows(session)
     if not rows:
         return 0
