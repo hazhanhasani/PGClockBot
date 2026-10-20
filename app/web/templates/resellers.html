@@ -30,6 +30,7 @@
   {% endfor %}
 </div>
 
+{% if can_manage_reps %}
 <div class="card settings-card">
   <h2>تنظیمات نمایندگی</h2>
   <p class="muted update-card-caption">
@@ -116,6 +117,14 @@
     </div>
   </form>
 </div>
+{% else %}
+<div class="card settings-card">
+  <h2>وضعیت نمایندگی</h2>
+  <p class="muted">در این حالت می‌توانید اطلاعات نمایندگان قبلی را ببینید. ساخت ادمین، تغییر ظرفیت و همگام‌سازی اختصاصی پاسارگارد غیرفعال است.</p>
+  <p class="muted">آدرس وب‌پنل ربات: <code dir="ltr">{{ panel_url }}</code></p>
+  <p class="muted">پنل عملیاتی: <strong>{{ 'GoGuard / SolidLayer' if active_panel_provider() == 'goguard' else 'PasarGuard' }}</strong></p>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="card card-flush">
