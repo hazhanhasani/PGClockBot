@@ -75,3 +75,51 @@ def test_admin_normalization_maps_go_guard_owner_limits() -> None:
     assert admin["data_limit"] == 2048
     assert admin["total_users"] == 15
     assert admin["used_traffic"] == 500
+
+
+def test_expiry_uses_configured_limit_not_expired_event() -> None:
+    user = _normalize_subscription(
+        {
+            "id": 12,
+            "username": "future",
+            "limit_expire": 1_900_000_000,
+            "expired_at": "2020-01-01T00:00:00Z",
+            "enabled": True,
+        }
+    )
+    assert user["expire"] == 1_900_000_000
+    assert user["status"] == "active"
+
+
+def test_admin_api_key_is_not_in_normalized_payload() -> None:
+    admin = _normalize_admin({"username": "owner", "role": "owner", "api_key": "super-secret"})
+    assert "api_key" not in admin
+
+
+def test_goguard_auth_uses_independent_api_key(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from app.services.goguard import GoGuardClient
+
+    client = GoGuardClient(
+        base_url="https://api.example.test",
+        username="seller",
+        password=None,
+        api_key="goguard-key-only",
+    )
+    client._ensure_api_base = AsyncMock()
+    try:
+        assert client._api_key == "goguard-key-only"
+        assert client._token is None
+        assert asyncio.run(client._headers()) == {"X-Api-Key": "goguard-key-only"}
+    finally:
+        asyncio.run(client.close())
+
+
+def test_goguard_subscription_role_permissions_are_scoped() -> None:
+    admin = _normalize_admin({"username": "seller", "role": "seller"})
+    permissions = admin["role"]["permissions"]
+    assert permissions["users"]["create"] is True
+    assert "admins" not in permissions
+    assert "nodes" not in permissions
