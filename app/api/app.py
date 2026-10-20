@@ -4753,6 +4753,37 @@ def create_api_app(lifespan=None) -> FastAPI:
             if panel_provider not in {"pasarguard", "goguard"}:
                 return _bot_err("نوع پنل نامعتبر است")
 
+            # Until plans/services have permanent per-provider affinity, never
+            # redirect existing panel IDs to a different backend. ID collisions
+            # could renew, revoke, or delete an unrelated user's subscription.
+            previous_provider = str(current.get("PANEL_PROVIDER") or "pasarguard").strip().lower()
+            if previous_provider in {"solidlayer", "solid-layer", "go_guard"}:
+                previous_provider = "goguard"
+            if panel_provider != previous_provider:
+                from app.db.models import UserService
+
+                async with SessionLocal() as db_session:
+                    active_service = await db_session.scalar(
+                        select(UserService.id).where(
+                            UserService.pg_user_id.is_not(None),
+                            UserService.is_cancelled.is_(False),
+                        ).limit(1)
+                    )
+                    unsettled_order = await db_session.scalar(
+                        select(Order.id).where(
+                            Order.status.in_([
+                                OrderStatus.PAID.value,
+                                OrderStatus.DELIVERING.value,
+                            ])
+                        ).limit(1)
+                    )
+                if active_service is not None or unsettled_order is not None:
+                    return _bot_err(
+                        "تغییر پنل فعال با سرویس‌های موجود یا سفارش‌های تحویل‌نشده مجاز نیست؛ "
+                        "شناسه‌های اشتراک ممکن است بین PasarGuard و GoGuard یکسان باشند. "
+                        "برای مهاجرت، ابتدا سرویس‌ها و سفارش‌ها باید به پنل مقصد نگاشت شوند."
+                    )
+
             update_mode_raw = str(form.get("BOT_UPDATE_MODE") or "").strip().lower()
             webhook_url_raw = str(form.get("WEBHOOK_URL") or "").strip()
             webhook_path_raw = str(form.get("WEBHOOK_PATH") or "").strip()
