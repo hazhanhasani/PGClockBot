@@ -4329,6 +4329,8 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
 @router.callback_query(F.data.startswith("adm:resapp:view:"))
 @require_bot_owner_handler
 async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.bot.auth import platform_can_manage_representatives
+
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
