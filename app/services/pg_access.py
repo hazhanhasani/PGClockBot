@@ -188,7 +188,7 @@ async def resolve_platform_pg_capabilities(
     if getattr(settings, "panel_provider", "pasarguard") == "goguard":
         env_username = getattr(settings, "goguard_username", None)
         env_password = getattr(settings, "goguard_password", None)
-        env_api_key = None
+        env_api_key = getattr(settings, "goguard_api_key", None)
         env_base_url = getattr(settings, "goguard_base_url", None)
     else:
         env_username = getattr(settings, "pg_username", None)
@@ -203,7 +203,7 @@ async def resolve_platform_pg_capabilities(
         "\r", ""
     ).strip()
     # base_url override only for setup probe (temporary client)
-    cache_key = f"{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
+    cache_key = f"{settings.panel_provider}|{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
     now = time.monotonic()
     if (
         use_cache
@@ -226,10 +226,11 @@ async def resolve_platform_pg_capabilities(
         "role": None,
         "admin": None,
     }
-    if settings.panel_provider == "goguard" and not pwd:
-        empty["error"] = "GoGuard به نام کاربری و رمز عبور نیاز دارد؛ کلید API پاسارگارد قابل استفاده نیست"
-        return empty
-    if not uname or not (pwd or key):
+    if settings.panel_provider == "goguard":
+        if not key and not (uname and pwd):
+            empty["error"] = "GoGuard به کلید API یا نام کاربری و رمز عبور نیاز دارد"
+            return empty
+    elif not uname or not (pwd or key):
         empty["error"] = "اعتبارنامه پنل ناقص است (نام کاربری + رمز یا کلید API)"
         return empty
 
@@ -247,8 +248,9 @@ async def resolve_platform_pg_capabilities(
                 from app.services.goguard import GoGuardClient
 
                 client = GoGuardClient(
-                    username=uname,
+                    username=uname or None,
                     password=pwd or None,
+                    api_key=key or None,
                     base_url=base_url or settings.goguard_base_url,
                 )
             else:
