@@ -508,6 +508,28 @@ def _do_update(target_version: str | None) -> None:
 
         use_git = bool(git and (root / ".git").exists())
         if use_git:
+            # A migrated installation can still have the original upstream
+            # as origin. Always rebind before fetch/checkout so a successful
+            # update never deploys code from the wrong repository.
+            from app.version import GITHUB_REPO
+
+            repo_url = f"https://github.com/{GITHUB_REPO}.git"
+            status, _ = _run([git, "remote", "get-url", "origin"], cwd=root, timeout=20)
+            command = (
+                [git, "remote", "set-url", "origin", repo_url]
+                if status == 0
+                else [git, "remote", "add", "origin", repo_url]
+            )
+            status, out = _run(command, cwd=root, timeout=20)
+            if status != 0:
+                _append_log(
+                    "تنظیم origin روی فورک ناموفق شد؛ برای جلوگیری از دریافت مخزن اشتباه، "
+                    "به دانلود آرشیو فورک تغییر مسیر داده شد"
+                )
+                use_git = False
+            else:
+                _append_log(f"مخزن آپدیت: {GITHUB_REPO}")
+        if use_git:
             _set_step("fetch", f"git fetch origin {branch}…")
             code, out = _run(
                 [git, "fetch", "--no-tags", "--prune", "origin", branch],
