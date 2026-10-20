@@ -367,7 +367,7 @@ async def verify_link(
         from urllib.parse import quote
 
         admin = await pg.get_current_admin()
-        tag = str((admin or {}).get("subscription_tag") or "").strip()
+        tag = str((admin or {}).get("subscription_tag") or (admin or {}).get("subscription_prefix") or "").strip()
         if tag and not any(char in tag for char in "/\\?#\r\n"):
             prefix = "/" + quote(tag, safe="")
             if prefix not in paths:
