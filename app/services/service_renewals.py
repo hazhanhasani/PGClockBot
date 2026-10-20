@@ -45,7 +45,9 @@ def renewal_terms(plan) -> dict:
     }
 
 
-def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dict:
+def calculate_renewal(
+    info: dict, terms: dict, *, now: int | None = None, provider: str = "pasarguard"
+) -> dict:
     info = validate_service_info(info)
     if info.get("error"):
         raise ValueError("اطلاعات زمان یا حجم سرویس کامل نیست؛ دوباره به‌روزرسانی کنید")
@@ -68,8 +70,18 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
     new_seconds = None if seconds == 0 else (old_seconds or 0) + seconds
     target_expire = None if new_seconds is None or on_hold else now + new_seconds
     pending_start = on_hold and new_seconds is not None
-    payload = {"status": "on_hold" if pending_start else "active", "data_limit": limit or 0, "expire": target_expire or 0}
-    if pending_start:
+    # GoGuard's documented bulk-update API has enabled/limit_expire only.
+    # It cannot set PasarGuard's on_hold_expire_duration/status. Start the
+    # countdown now instead of producing a paid but undeliverable renewal.
+    goguard_immediate = provider == "goguard" and pending_start
+    if goguard_immediate:
+        target_expire = now + new_seconds
+    payload = {
+        "status": "on_hold" if pending_start and not goguard_immediate else "active",
+        "data_limit": limit or 0,
+        "expire": target_expire or 0,
+    }
+    if pending_start and not goguard_immediate:
         payload["on_hold_expire_duration"] = new_seconds
     volume_label = lambda value: "نامحدود" if value is None else format_bytes(value)
     time_label = lambda value: "نامحدود" if value is None else f"{value / 86400:.2f}".rstrip("0").rstrip(".") + " روز"
@@ -79,11 +91,16 @@ def calculate_renewal(info: dict, terms: dict, *, now: int | None = None) -> dic
         f"حجم پس از تمدید: {volume_label(new_remaining)}",
         f"زمان مانده: {time_label(old_seconds)}",
         f"زمان پلن: {time_label(seconds or None)}",
-        f"زمان پس از تمدید: {time_label(new_seconds)}" + (" پس از اتصال" if pending_start else ""),
+        f"زمان پس از تمدید: {time_label(new_seconds)}" + (" پس از اتصال" if pending_start and not goguard_immediate else ""),
     ]
     if target_expire:
         lines.append(f"انقضای جدید: {format_expire_short(target_expire)}")
     warnings = []
+    if goguard_immediate:
+        warnings.append(
+            "GoGuard تمدید در انتظار اتصال را از طریق API پشتیبانی نمی‌کند؛ "
+            "زمان اشتراک بلافاصله از تاریخ تمدید محاسبه می‌شود."
+        )
     if on_hold and new_seconds is None:
         warnings.append("پلن زمان نامحدود، سرویس را بدون انتظار برای اتصال فعال می‌کند.")
     if remaining is None and added is not None:
@@ -132,7 +149,13 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_id,
     )
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
-    result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
+    from app.config import get_settings
+
+    result = calculate_renewal(
+        await pg.get_user_by_id(service.pg_user_id),
+        terms,
+        provider=get_settings().panel_provider,
+    )
     result.pop("payload")
     quote = await quote_product(session, plan, shop_id=shop_id)
     return {**result, **quote.payload(), "terms": terms, "plan_name": plan.name, "request_key": secrets.token_hex(16)}
