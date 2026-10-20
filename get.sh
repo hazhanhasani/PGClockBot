@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-REPO_URL="${PGCLOCK_REPO:-https://github.com/hazhanhasani/PGClockBot.git}"
+REPO_URL="https://github.com/hazhanhasani/PGClockBot.git"
 DIR_NAME="${PGCLOCK_DIR:-PGClockBot}"
 # Channel: main (stable) or dev. PGCLOCK_CHANNEL aliases PGCLOCK_BRANCH.
 CHANNEL_FROM_ENV=0
@@ -89,13 +89,33 @@ restore_runtime() {
   shopt -u nullglob
 }
 
+ensure_fork_origin() {
+  # A legacy install can retain upstream as origin. Never silently ignore
+  # remote-set failures: a later fetch could then deploy upstream.
+  if git remote get-url origin >/dev/null 2>&1; then
+    if ! git remote set-url origin "$REPO_URL"; then
+      err "Failed to switch origin to owner fork: $REPO_URL"
+      return 1
+    fi
+  elif ! git remote add origin "$REPO_URL"; then
+    err "Failed to add owner fork as origin: $REPO_URL"
+    return 1
+  fi
+  local current
+  current="$(git remote get-url origin)" || return 1
+  if [[ "$current" != "$REPO_URL" ]]; then
+    err "Unexpected git origin; refusing to update from a different repository."
+    return 1
+  fi
+}
+
 force_sync_to_remote() {
   local target="${REMOTE_REF:-origin/${REMOTE_BRANCH}}"
   info "Syncing hard to ${target} (keeps .env + data)..."
   backup_runtime
   local bak="$RUNTIME_BAK"
 
-  git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
+  ensure_fork_origin || exit 1
   # Targeted fetch (no tags / no --all) — much faster on weak VPS links
   if [[ -n "$REMOTE_REF" ]]; then
     git fetch --no-tags --prune origin "$REMOTE_REF" \
@@ -122,7 +142,7 @@ git_update() {
   fi
 
   info "Updating from GitHub..."
-  git remote set-url origin "$REPO_URL" 2>/dev/null || true
+  ensure_fork_origin || exit 1
 
   # Explicit channel/branch env → hard-sync to that tip (install/update to dev).
   if [[ "$CHANNEL_FROM_ENV" -eq 1 || -n "$REMOTE_REF" ]]; then
