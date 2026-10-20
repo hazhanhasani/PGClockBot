@@ -200,12 +200,14 @@
           </a>
           {% endif %}
           {% if is_owner %}
-          {% if ident.can_manage_representatives %}
+          {# Owner may always inspect the locally stored reseller directory.
+             PasarGuard admins.create only gates provisioning, never read access.
+             In GoGuard, admins.create is unsupported but existing representatives
+             must remain visible for support, billing and migration planning. #}
           <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
             <span>نمایندگان</span>
           </a>
-          {% endif %}
           {% endif %}
           {% if is_admin or 'orders' in perms or 'payments' in perms %}
           <a href="/finance" class="nav-item nav-item-bot {% if path.startswith('/finance') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/service-cancellations') %}active{% endif %}">
