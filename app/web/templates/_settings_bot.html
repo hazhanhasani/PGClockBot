@@ -160,6 +160,7 @@
   {# —— Panel provider selector —— #}
   {% set pg_api_key_ready = (env_values.get('PG_API_KEY') or '')|length > 0 %}
   {% set goguard_password_ready = (env_values.get('GOGUARD_PASSWORD') or '')|length > 0 %}
+  {% set goguard_api_key_ready = (env_values.get('GOGUARD_API_KEY') or '')|length > 0 %}
   <div class="card settings-card">
     <h2>پنل فروش اشتراک</h2>
     <p class="muted update-card-caption">یک پنل فعال انتخاب کنید. اطلاعات اتصال PasarGuard و SolidLayer / GoGuard مستقل ذخیره می‌شوند.</p>
@@ -259,12 +260,25 @@
         <div class="setting-item">
           <label>رمز عبور GoGuard
             <div class="pw-field">
-              <input id="goguard-password-input" name="GOGUARD_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if goguard_password_ready else 'رمز ادمین GoGuard' }}" {{ 'required' if not goguard_password_ready else '' }} />
+              <input id="goguard-password-input" name="GOGUARD_PASSWORD" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if goguard_password_ready else 'رمز ادمین GoGuard' }}" />
               <button type="button" class="pw-toggle" data-pw-for="goguard-password-input" aria-label="نمایش رمز GoGuard" aria-pressed="false">
                 <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
             {% if goguard_password_ready %}<small class="muted">رمز ذخیره شده است؛ برای حفظ آن فیلد را خالی بگذارید.</small>{% else %}<small class="muted">GoGuard با نام کاربری و رمز احراز هویت می‌کند؛ API key پاسارگارد قابل استفاده نیست.</small>{% endif %}
+          </label>
+        </div>
+        <div class="setting-item full">
+          <label>کلید API اختصاصی GoGuard (X-API-Key)
+            <div class="pw-field">
+              <input id="goguard-api-key-input" name="GOGUARD_API_KEY" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا کلید فعلی حفظ شود' if goguard_api_key_ready else 'کلید API پنل GoGuard (اختیاری)' }}" />
+              <button type="button" class="pw-toggle" data-pw-for="goguard-api-key-input" aria-label="نمایش کلید API GoGuard" aria-pressed="false">
+                <svg class="pw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <small class="muted">احراز هویت API با هدر <code dir="ltr">X-API-Key</code>؛ کلید GoGuard از کلید PasarGuard جداست.
+              {% if goguard_api_key_ready %}<span class="badge approved">کلید GoGuard ذخیره‌شده</span>{% endif %}
+            </small>
           </label>
         </div>
         <div class="setting-item full">
