@@ -145,9 +145,13 @@
         <label>نام کاربری GoGuard
           <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" required />
         </label>
-        <label>رمز عبور GoGuard
-          <input name="goguard_password" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_goguard_password else '' }}" {{ 'required' if not has_goguard_password else '' }} />
-          {% if has_goguard_password %}<small class="muted">رمز قبلاً ذخیره شده؛ برای حفظ آن خالی بگذارید.</small>{% else %}<small class="muted">احراز هویت GoGuard با نام کاربری و رمز انجام می‌شود.</small>{% endif %}
+        <label>رمز عبور GoGuard (اختیاری در صورت استفاده از کلید API)
+          <input name="goguard_password" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_goguard_password else '' }}" />
+          {% if has_goguard_password %}<small class="muted">رمز قبلاً ذخیره شده؛ برای حفظ آن خالی بگذارید.</small>{% else %}<small class="muted">برای ورود با نام کاربری و رمز استفاده می‌شود.</small>{% endif %}
+        </label>
+        <label>کلید API اختصاصی GoGuard (X-API-Key)
+          <input name="goguard_api_key" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا کلید فعلی حفظ شود' if has_goguard_api_key else 'کلید API پنل GoGuard' }}" />
+          {% if has_goguard_api_key %}<small class="muted">کلید فعلی محفوظ است؛ برای تغییر مقدار جدید وارد کنید.</small>{% else %}<small class="muted">به‌جای ورود با رمز می‌توان از کلید API پنل GoGuard استفاده کرد.</small>{% endif %}
         </label>
         <p class="muted">در GoGuard شناسه‌های سرویس برای اختصاص اشتراک استفاده می‌شوند. مدیریت سرویس‌ها و قالب‌های ساخت کاربر در پنل اصلی انجام می‌شود.</p>
       </div>
