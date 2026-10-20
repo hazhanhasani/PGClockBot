@@ -1768,6 +1768,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         goguard_username: str = Form(""),
         goguard_password: str = Form(""),
         goguard_api_key: str = Form(""),
+        clear_goguard_api_key: str = Form(""),
         web_port: str = Form("9000"),
         public_base_url: str = Form(""),
         currency: str = Form("تومان"),
@@ -1801,7 +1802,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return await fail(str(exc))
             gg_user = (goguard_username or current_vals.get("GOGUARD_USERNAME") or "").strip()
             gg_pass = (goguard_password or current_vals.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
-            gg_key = (goguard_api_key or current_vals.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            clear_gg_key = str(clear_goguard_api_key or "").strip().lower() in {"1", "on", "true", "yes"}
+            gg_key = "" if clear_gg_key else (goguard_api_key or current_vals.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
             if not gg_key and not (gg_user and gg_pass):
                 return await fail("کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.")
             port = (web_port or "9000").strip()
@@ -4795,7 +4797,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             goguard_base = normalize_pg_base_url(str(form.get("GOGUARD_BASE_URL") or current.get("GOGUARD_BASE_URL") or "").strip())
             goguard_user = str(form.get("GOGUARD_USERNAME") or current.get("GOGUARD_USERNAME") or "").strip()
             goguard_pass = str(form.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip() or str(current.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
-            goguard_key = str(form.get("GOGUARD_API_KEY") or "").replace("\r", "").strip() or str(current.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            clear_goguard_key = str(form.get("clear_goguard_api_key") or "").strip().lower() in {"1", "on", "true", "yes"}
+            goguard_key = "" if clear_goguard_key else (
+                str(form.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+                or str(current.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            )
 
             pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
             pg_user = str(form.get("PG_USERNAME") or "").strip()
