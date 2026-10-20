@@ -13,14 +13,15 @@
 این دستورها را اجرا کنید:
 
 ```bash
-git fetch --no-tags https://github.com/Mrclocks/PGClockBot.git dev &&
-git restore --source=FETCH_HEAD -- app/services/update_channel.py app/services/migration_metadata.py &&
-sudo systemctl restart pgclockbot
+git remote set-url origin https://github.com/hazhanhasani/PGClockBot.git &&
+bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh) update
 ```
 
-این مرحله دو فایل تشخیص مایگریشن را از کانال توسعه جایگزین می‌کند و سرویس را
-دوباره راه می‌اندازد. سپس در تنظیمات پنل، تب آپدیت، کانال **توسعه** را انتخاب
-کنید، بررسی آپدیت را دوباره اجرا کنید و آپدیت معمولی را انجام دهید.
+این راهنما مربوط به نسخهٔ قدیمی 0.2.33 است. در نصب‌های فعلی، مخزن و کانال اصلی
+باید فورک `hazhanhasani/PGClockBot` و شاخهٔ `main` باشد؛ دستور بالا ریموت را
+اصلاح می‌کند و نصاب به‌روز فورک را اجرا می‌کند. برای تعمیر نسخه‌های قدیمی، به‌جای
+جایگزینی دستی فایل‌های قدیمی از مخزن اصلی، ابتدا از داده‌ها بکاپ بگیرید و
+کانال پایدار فورک را آپدیت کنید.
 
 برای این رفع اشکال، مایگریشن یا جدول `alembic_version` را دستی تغییر ندهید؛
 نسخهٔ جدید مسیر عادی ارتقای دیتابیس را اجرا می‌کند.
