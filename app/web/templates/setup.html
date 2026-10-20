@@ -143,7 +143,7 @@
           <small class="muted">ریشه API را وارد کنید؛ نه آدرس مستندات <code dir="ltr">/docs/index.html</code>.</small>
         </label>
         <label>نام کاربری GoGuard
-          <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" required />
+          <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" />
         </label>
         <label>رمز عبور GoGuard (اختیاری در صورت استفاده از کلید API)
           <input name="goguard_password" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_goguard_password else '' }}" />
