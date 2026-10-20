@@ -153,6 +153,12 @@
           <input name="goguard_api_key" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا کلید فعلی حفظ شود' if has_goguard_api_key else 'کلید API پنل GoGuard' }}" />
           {% if has_goguard_api_key %}<small class="muted">کلید فعلی محفوظ است؛ برای تغییر مقدار جدید وارد کنید.</small>{% else %}<small class="muted">به‌جای ورود با رمز می‌توان از کلید API پنل GoGuard استفاده کرد.</small>{% endif %}
         </label>
+        {% if has_goguard_api_key %}
+        <label><span class="ui-check">
+          <input type="checkbox" name="clear_goguard_api_key" value="1" />
+          حذف کلید GoGuard و استفاده از ورود با رمز
+        </span></label>
+        {% endif %}
         <p class="muted">در GoGuard شناسه‌های سرویس برای اختصاص اشتراک استفاده می‌شوند. مدیریت سرویس‌ها و قالب‌های ساخت کاربر در پنل اصلی انجام می‌شود.</p>
       </div>
       <label>پورت وب‌پنل (WEB_PORT)
