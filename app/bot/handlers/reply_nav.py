@@ -1190,22 +1190,57 @@ async def open_admin_resellers_hub(
 ) -> None:
     from app.bot.nav_inline import admin_resellers_hub_keyboard, present_nav_panel
     from app.bot.auth import platform_can_manage_representatives
+    from app.config import get_settings
+    from app.db.models import ResellerProfile
+    from sqlalchemy import func, select
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
-    if not await platform_can_manage_representatives():
-        await message.answer(feedback.REPRESENTATIVES_DISABLED)
-        return
+    # BluePanel-style central seller overview from LOCAL shop records,
+    # without requiring GoGuard to expose a list/create-admin API.
     ui = await get_all_settings(session)
-    body = (
-        with_caption(screen_heading(ui, "a.resellers"), screen_caption(ui, "a.resellers"))
-    )
+    can_provision = await platform_can_manage_representatives()
+    try:
+        total = int(await session.scalar(select(func.count(ResellerProfile.id))) or 0)
+        active = int(await session.scalar(
+            select(func.count(ResellerProfile.id)).where(
+                ResellerProfile.is_active.is_(True)
+            )
+        ) or 0)
+        suspended = int(await session.scalar(
+            select(func.count(ResellerProfile.id)).where(
+                ResellerProfile.billing_suspended_at.is_not(None)
+            )
+        ) or 0)
+        summary = (
+            f"\n\n📊 <b>وضعیت نمایندگان</b>\n"
+            f"👥 کل: <b>{total}</b>  ·  ✅ فعال: <b>{active}</b>\n"
+            f"💳 معلق به‌دلیل بدهی: <b>{suspended}</b>"
+        )
+    except Exception:
+        summary = "\n\n📊 آمار محلی موقتاً در دسترس نیست."
+    provider = get_settings().panel_provider
+    if not can_provision:
+        summary += (
+            "\n\n⚠️ <b>حالت مشاهده و رسیدگی</b>\n"
+            + (
+                "GoGuard ساخت ادمین از طریق API را پشتیبانی نمی‌کند؛ نمایندگان موجود قابل مشاهده‌اند."
+                if provider == "goguard"
+                else "حساب پنل مجوز ایجاد ادمین ندارد؛ اطلاعات نمایندگان موجود قابل مشاهده است."
+            )
+        )
+    body = with_caption(
+        screen_heading(ui, "a.resellers"), screen_caption(ui, "a.resellers")
+    ) + summary
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
     await present_nav_panel(
-        message, text=body, inline=admin_resellers_hub_keyboard(ui), state=state
+        message,
+        text=body,
+        inline=admin_resellers_hub_keyboard(ui, can_provision=can_provision),
+        state=state,
     )
     return
 
@@ -1740,11 +1775,22 @@ async def _soft_admin(
         ):
             return
         if data.startswith("adm:resellers") or data.startswith("adm:resapp"):
-            from app.bot.auth import platform_can_manage_representatives
+            # Owner can always browse existing representatives; provisioning,
+            # capacity and approval operations retain their action-level gate.
+            read_only = (
+                data == "adm:resellers"
+                or data.startswith("adm:resellers:list:")
+                or data.startswith("adm:resellers:view:")
+                or data.startswith("adm:resellers:svcs:")
+                or data == "adm:resapp:list"
+                or data.startswith("adm:resapp:view:")
+            )
+            if not read_only:
+                from app.bot.auth import platform_can_manage_representatives
 
-            if not await platform_can_manage_representatives():
-                await message.answer(feedback.REPRESENTATIVES_DISABLED)
-                return
+                if not await platform_can_manage_representatives():
+                    await message.answer(feedback.REPRESENTATIVES_DISABLED)
+                    return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
     try:
