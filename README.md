@@ -127,6 +127,22 @@ export PGCLOCK_HOME=/path/to/PGClockBot
 
 ---
 
+## 🔄 نسخه 0.5.1 — یکسان‌سازی مخزن آپدیت
+
+نصاب، مدیر خط فرمان و آپدیتر داخل پنل همگی از فورک `hazhanhasani/PGClockBot` دریافت می‌کنند. نصب‌های قدیمی ممکن است هنوز `origin` را روی `Mrclocks/PGClockBot` داشته باشند؛ برای تعمیر اولیه **یک بار دستور زیر را در SSH** اجرا کنید:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh) update
+```
+
+این دستور قبل از دریافت نسخه، آدرس `origin` را اصلاح می‌کند. برای تأیید:
+
+```bash
+git -C ~/PGClockBot remote get-url origin
+```
+
+خروجی باید `https://github.com/hazhanhasani/PGClockBot.git` باشد. نام و حق نشر مؤلف اصلی و لینک Pull Requestهای تاریخی upstream تغییر نمی‌کنند؛ زیرا منابع اصلی هستند.
+
 ## ✨ نسخه 0.5.0 — سازگاری GoGuard و PasarGuard
 
 نسخه جدید هماهنگ‌سازی عملیات مشترک فروش، تمدید و مدیریت اشتراک را هدف قرار می‌دهد. قابلیت‌های اختصاصی پاسارگارد که در Swagger رسمی GoGuard وجود ندارند (تمپلیت، Host/Node، ایجاد ادمین) در حالت GoGuard در دسترس نیستند. **یک provider عملیاتی در هر نصب فعال است** و برای جابه‌جایی سرویس‌های موجود باید مهاجرت داده انجام شود؛ بدون مهاجرت، شناسهٔ اشتراک‌ها ممکن است تداخل کنند. آزمایش سفارش واقعی/اتصال به سرور توسط اپراتور ضروری است.
