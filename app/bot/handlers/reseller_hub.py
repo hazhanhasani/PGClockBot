@@ -35,6 +35,7 @@ class ResellerHub:
     ui: dict[str, str]
     can_add_representative: bool
     queue: PendingCounts
+    owner_id: int = 0  # Verified shop ID, never inferred from chat/callback.
 
 
 async def load_reseller_hub(
@@ -64,7 +65,10 @@ async def load_reseller_hub(
     except Exception:
         logger.warning("reseller hub pending_counts failed shop_id=%s", owner_id, exc_info=True)
         queue = PendingCounts()
-    return ResellerHub(profile=profile, ui=ui, can_add_representative=can_add, queue=queue)
+    return ResellerHub(
+        profile=profile, ui=ui, can_add_representative=can_add,
+        queue=queue, owner_id=int(owner_id),
+    )
 
 
 async def open_reseller_group(
