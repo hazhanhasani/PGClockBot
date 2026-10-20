@@ -606,6 +606,20 @@ class GoGuardClient(PasarGuardClient):
         actual = str(current.get("username") or "").strip().lower()
         return current if expected and expected == actual else None
 
+    async def get_admin_gate(self, username: str) -> tuple[str, dict | None]:
+        """GoGuard cannot look up other admins with the documented endpoints.
+
+        Never return `missing` from a failed lookup: that could revoke a real
+        staff account during a transient outage.
+        """
+        try:
+            current = await self.get_current_admin()
+        except Exception:
+            return "unreachable", None
+        if current and str(current.get("username") or "").casefold() == str(username or "").strip().casefold():
+            return "ok", current
+        return "unreachable", None
+
     async def get_admin_roles(self) -> list[dict]:
         return []
 
