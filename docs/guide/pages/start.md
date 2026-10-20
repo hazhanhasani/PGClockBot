@@ -11,7 +11,7 @@ id: start
 روی اوبونتو ۲۲٫۰۴ یا جدیدتر:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/hazhanhasani/PGClockBot/main/get.sh)
 ```
 
 منوی انگلیسی باز می‌شود. گزینهٔ **Install** را بزنید و صبر کنید تا سرویس بالا بیاید. سپس در مرورگر ویزارد اولیه را کامل کنید.
