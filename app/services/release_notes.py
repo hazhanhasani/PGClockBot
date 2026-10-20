@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.1": [
+        "منبع نصب/آپدیت/بازگشت نسخه: مسیرهای GitHub به فورک hazhanhasani/PGClockBot تثبیت شدند؛ ریموت قدیمی origin قبل از git fetch اصلاح می‌شود.",
+        "نصاب و مدیر خط فرمان دیگر در صورت شکست تنظیم ریموت سراغ مخزن اصلی نمی‌روند.",
+        "لینک GitHub داخل داشبورد، راهنمای نصب و نسخه HTML راهنما به فورک منتقل شدند.",
+        "تست نگهبان مسیرهای مخزن برای جلوگیری از برگشت تصادفی آدرس upstream به نصب و آپدیت اضافه شد.",
+        "ارجاعات تاریخی به Pull Requestهای upstream و حق نشر مؤلف اصلی برای صحت منبع نگه داشته شده‌اند.",
+    ],
     "0.5.0": [
         "پنل‌ها: هماهنگ‌سازی GoGuard / SolidLayer با فروش، مدیریت اشتراک، محاسبهٔ تمدید و رابط ربات؛ پشتیبانی پاسارگارد حفظ شده است.",
         "بروزرسانی: مرجع تشخیص نسخه و دریافت تغییرات به فورک hazhanhasani/PGClockBot تغییر کرد.",
