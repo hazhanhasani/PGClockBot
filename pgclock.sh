@@ -159,6 +159,19 @@ sudo_wrap() {
   fi
 }
 
+
+# APT can be busy with unattended-upgrades or another installer.
+# Never delete dpkg lock files or kill apt/dpkg processes: ask apt itself
+# to wait for its frontend lock (supported by Ubuntu 22.04+).
+apt_get() {
+  local timeout="${PGCLOCK_APT_LOCK_TIMEOUT:-600}"
+  if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+    timeout=600
+  fi
+  sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
+    apt-get -o "DPkg::Lock::Timeout=${timeout}" "$@"
+}
+
 ask_yn() {
   # ask_yn "Prompt" Y|N
   local prompt="$1"
@@ -406,8 +419,8 @@ apply_install_ssl() {
     fi
     if ! command -v certbot >/dev/null 2>&1; then
       info "Installing certbot…"
-      sudo_wrap apt-get install -y certbot >/dev/null 2>&1 \
-        || sudo_wrap apt-get install -y certbot || true
+      apt_get install -y certbot >/dev/null 2>&1 \
+        || apt_get install -y certbot || true
     fi
   else
     step "SSL · temporary self-signed for ${ip}"
@@ -859,13 +872,13 @@ ensure_apt_packages() {
     return 0
   fi
   export DEBIAN_FRONTEND=noninteractive
-  sudo_wrap apt-get update -y >/dev/null
+  apt_get update -y >/dev/null
 
   # Phase 1: postgresql-common first (provides /usr/bin/pg_lsclusters).
   if ! dpkg -s postgresql-common >/dev/null 2>&1 \
     || ! command -v pg_lsclusters >/dev/null 2>&1; then
     info "Installing postgresql-common (pg_lsclusters)…"
-    if ! sudo_wrap apt-get install -y postgresql-common; then
+    if ! apt_get install -y postgresql-common; then
       err "Failed to install postgresql-common"
       return 1
     fi
@@ -880,8 +893,7 @@ ensure_apt_packages() {
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
     info "Installing: ${missing[*]}"
-    if ! sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
-      apt-get install -y "${missing[@]}"; then
+    if ! apt_get install -y "${missing[@]}"; then
       err "apt-get install failed"
       return 1
     fi
@@ -893,8 +905,7 @@ ensure_apt_packages() {
   fi
   if ! command -v pg_dump >/dev/null 2>&1 || ! command -v pg_restore >/dev/null 2>&1; then
     warn "pg_dump/pg_restore missing — installing postgresql-client"
-    sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
-      apt-get install -y postgresql-client || true
+    apt_get install -y postgresql-client || true
   fi
   if ! command -v pg_dump >/dev/null 2>&1 || ! command -v pg_restore >/dev/null 2>&1; then
     err "pg_dump/pg_restore still missing — install postgresql-client manually (backups will fail)"
@@ -902,7 +913,7 @@ ensure_apt_packages() {
   fi
   if ! command -v pg_lsclusters >/dev/null 2>&1; then
     warn "pg_lsclusters still missing — installing postgresql-common again"
-    sudo_wrap apt-get install -y --reinstall postgresql-common || true
+    apt_get install -y --reinstall postgresql-common || true
   fi
   if command -v pg_lsclusters >/dev/null 2>&1; then
     ok "Prerequisites ready (pg_lsclusters=$(command -v pg_lsclusters))"
@@ -925,9 +936,8 @@ ensure_pg_client_tools() {
   fi
   info "Installing postgresql-client (required for backups)…"
   export DEBIAN_FRONTEND=noninteractive
-  sudo_wrap apt-get update -y >/dev/null || true
-  if sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y postgresql-client; then
+  apt_get update -y >/dev/null || true
+  if apt_get install -y postgresql-client; then
     if command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
       ok "postgresql-client installed (pg_dump=$(command -v pg_dump))"
       return 0
@@ -1135,15 +1145,15 @@ _try_apt_install_python312() {
   command -v apt-get >/dev/null 2>&1 || return 1
   export DEBIAN_FRONTEND=noninteractive
   info "Trying to install Python 3.12 for the panel venv…"
-  sudo_wrap apt-get update -y || true
-  if sudo_wrap apt-get install -y python3.12 python3.12-venv; then
+  apt_get update -y || true
+  if apt_get install -y python3.12 python3.12-venv; then
     command -v python3.12 >/dev/null 2>&1 && return 0
   fi
   warn "python3.12 not in default apt — trying deadsnakes PPA…"
-  sudo_wrap apt-get install -y software-properties-common ca-certificates gnupg || true
+  apt_get install -y software-properties-common ca-certificates gnupg || true
   if sudo_wrap add-apt-repository -y ppa:deadsnakes/ppa; then
-    sudo_wrap apt-get update -y || true
-    if sudo_wrap apt-get install -y python3.12 python3.12-venv python3.12-dev; then
+    apt_get update -y || true
+    if apt_get install -y python3.12 python3.12-venv python3.12-dev; then
       command -v python3.12 >/dev/null 2>&1 && return 0
     fi
   fi
