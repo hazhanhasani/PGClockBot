@@ -1117,7 +1117,7 @@ async def get_pg_for_reseller(session, reseller_user_id: int) -> PasarGuardClien
         return await get_pg_for_principal(session, principal_id=int(linked.id))
 
     api_key = decrypt_secret(getattr(profile, "pg_api_key_enc", None))
-    if api_key and get_settings().panel_provider != "goguard":
+    if api_key:
         client = _new_pg_client(
             username=profile.pg_admin_username,
             api_key=api_key,
@@ -1192,7 +1192,7 @@ async def get_pg_for_staff(
     if _cached_client_ready(cached):
         return cached
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
-    if api_key and get_settings().panel_provider != "goguard":
+    if api_key:
         client = _new_pg_client(username=row.pg_username, api_key=api_key)
         api_key = ""
         await client.ensure_token()
@@ -1289,7 +1289,7 @@ async def get_pg_for_principal(
     if _cached_client_ready(cached):
         return cached
     api_key = decrypt_secret(getattr(row, "pg_api_key_enc", None))
-    if api_key and get_settings().panel_provider != "goguard":
+    if api_key:
         client = _new_pg_client(username=uname, api_key=api_key)
         api_key = ""
         await client.ensure_token()
