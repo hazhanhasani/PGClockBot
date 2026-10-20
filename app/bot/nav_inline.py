@@ -1103,7 +1103,9 @@ def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 @editable_screen("a.resellers")
-def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+def admin_resellers_hub_keyboard(
+    ui: dict | None = None, *, can_provision: bool = True
+) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_RES_ADD,
         REPLY_ACTION_ADM_RES_APPS,
@@ -1125,7 +1127,7 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             style_id=key, style_fallback="primary",
         )
         for key, text in _admin_resellers_submenu_entries(ui)
-        if key in cb_map
+        if key in cb_map and (can_provision or key != REPLY_ACTION_ADM_RES_ADD)
     ]
     rows: list[list[InlineKeyboardButton]] = []
     for i in range(0, len(buttons), 2):
