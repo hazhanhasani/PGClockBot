@@ -849,6 +849,15 @@ async def create_application(
     plan: ResellerPlan,
     note: str | None = None,
 ) -> tuple[ResellerApplication, Order | None]:
+    from app.config import get_settings
+
+    # GoGuard Swagger has no admin-create endpoint. Do not collect money for
+    # a product we cannot activate or create a paid-but-undeliverable request.
+    if get_settings().panel_provider == "goguard":
+        raise ValueError(
+            "درخواست نمایندگی جدید با GoGuard فعلاً فعال نیست؛ "
+            "این پنل API ساخت ادمین نماینده ندارد و پرداخت دریافت نمی‌شود."
+        )
     if user.role == Role.RESELLER.value:
         raise ValueError("شما هم‌اکنون نماینده هستید")
     if user.role == Role.ADMIN.value:
@@ -1017,6 +1026,13 @@ async def provision_reseller(
     panel_base_url: str = "",
 ) -> dict:
     """Activate reseller: PG admin + web panel creds + optional bot-token setup link."""
+    from app.config import get_settings
+
+    if get_settings().panel_provider == "goguard":
+        raise ValueError(
+            "ساخت نماینده از GoGuard پشتیبانی نمی‌شود؛ "
+            "قبل از فعال‌سازی، روش ایجاد امن ادمین در پنل مقصد لازم است."
+        )
     from app.services.pasarguard import get_pg
     from app.services.pg_admin_subscription import is_current_capacity_plan
     from app.services.web_auth import hash_password
