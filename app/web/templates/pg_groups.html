@@ -1,20 +1,22 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
-{% block title %}گروه‌های پاسارگارد{% endblock %}
+{% set is_goguard = active_panel_provider() == 'goguard' %}
+{% block title %}{% if is_goguard %}سرویس‌های GoGuard{% else %}گروه‌های پاسارگارد{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('groups', 'گروه‌ها', 'pg', help='pg-groups') }}
+    {{ page_title('groups', 'سرویس‌های GoGuard' if is_goguard else 'گروه‌ها', 'pg', help='pg-groups') }}
   </div>
   {% if can_create %}
-  <button type="button" class="btn" data-modal-open="modal-pg-group-create">ساخت گروه</button>
+  <button type="button" class="btn" data-modal-open="modal-pg-group-create">{% if is_goguard %}ساخت سرویس{% else %}ساخت گروه{% endif %}</button>
   {% endif %}
 </div>
 
 <div class="card card-flush">
-  <h2>گروه‌های موجود</h2>
+  {% if is_goguard %}<p class="muted">سرویس‌ها از API GoGuard خوانده می‌شوند و از این صفحه قابل ویرایش نیستند؛ تغییرات را در پنل اصلی GoGuard انجام دهید.</p>{% endif %}
+  <h2>{% if is_goguard %}سرویس‌های موجود{% else %}گروه‌های موجود{% endif %}</h2>
   {% if not groups %}
-  <p class="muted">گروهی نیست.</p>
+  <p class="muted">{% if is_goguard %}سرویسی در دسترس نیست.{% else %}گروهی نیست.{% endif %}</p>
   {% else %}
   {% if can_delete %}
   {{ table_bulk_bar('/pg/groups/bulk-action', [
@@ -23,15 +25,15 @@
   {% endif %}
   <div class="table-wrap">
   <table class="table-compact"{% if can_delete %} data-bulk-select{% endif %}>
-    <thead><tr>{% if can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">اینباندها</th><th class="col-hide-sm col-amount">کاربران</th><th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
+    <thead><tr>{% if can_delete %}{{ table_select_head() }}{% endif %}<th class="col-id">شناسه</th><th class="col-name">نام</th><th class="col-hide-sm col-text">{% if is_goguard %}نودها{% else %}اینباندها{% endif %}</th>{% if not is_goguard %}<th class="col-hide-sm col-amount">کاربران</th>{% endif %}<th class="col-status">وضعیت</th><th class="col-actions"></th></tr></thead>
     <tbody>
     {% for g in groups %}
       <tr data-bulk-ops="{% if can_delete and g.get('id') %}delete{% endif %}">
         {% if can_delete %}{% if g.get('id') %}{{ table_select_cell(g.get('id')) }}{% else %}<td class="col-select"></td>{% endif %}{% endif %}
         <td class="mono">{{ g.get('id') }}</td>
         <td>{{ g.get('name') }}</td>
-        <td class="mono muted col-hide-sm">{{ g.get('inbound_tags') or '—' }}</td>
-        <td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>
+        <td class="mono muted col-hide-sm">{% if is_goguard %}{{ (g.get('nodes') or [])|map(attribute='name')|join(', ') or '—' }}{% else %}{{ g.get('inbound_tags') or '—' }}{% endif %}</td>
+        {% if not is_goguard %}<td class="mono col-hide-sm">{{ g.get('total_users') if g.get('total_users') is not none else '—' }}</td>{% endif %}
         <td>{% if g.get('is_disabled') %}<span class="badge warn">خاموش</span>{% else %}<span class="badge active">فعال</span>{% endif %}</td>
         <td class="col-actions">
           {% if (can_update or can_delete) and g.get('id') %}

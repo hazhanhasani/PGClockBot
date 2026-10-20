@@ -29,10 +29,10 @@
 
     <div class="auth-form auth-form--card setup-probe" id="setup-probe" hidden>
       <h2 class="setup-title">بررسی سطح دسترسی</h2>
-      <p class="muted setup-lead">نقش، مجوزها و سقف‌های حساب پاسارگارد در حال خواندن است.</p>
+      <p class="muted setup-lead">نقش، مجوزها و سقف‌های حساب پنل فعال در حال خواندن است.</p>
       <div class="setup-probe-bar" aria-hidden="true"><i id="setup-probe-fill"></i></div>
       <ol class="setup-probe-steps" id="setup-probe-steps">
-        <li data-probe="0">اتصال به پاسارگارد</li>
+        <li data-probe="0">اتصال به پنل انتخاب‌شده</li>
         <li data-probe="1">خواندن نقش و مجوزها</li>
         <li data-probe="2">خواندن سقف‌ها</li>
         <li data-probe="3">آماده‌سازی منوها</li>
@@ -43,7 +43,7 @@
     <div class="auth-form auth-form--card setup-step" data-step="0" hidden>
       <h2 class="setup-title">خوش آمدید</h2>
       <p class="muted setup-lead">
-        چند مرحله کوتاه برای تنظیم مدیر، ربات و اتصال پاسارگارد.
+        چند مرحله کوتاه برای تنظیم مدیر، ربات و اتصال پنل اشتراک.
         فقط با تکمیل هر مرحله می‌توانید ادامه دهید.
       </p>
       <button type="button" class="btn" data-next="1">شروع</button>
@@ -93,19 +93,24 @@
 
     {# —— Step 3: Other —— #}
     <form class="auth-form auth-form--card setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
-      <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
+      <h2 class="setup-title">۳ · اتصال پنل و وب</h2>
+      <label>نوع پنل اشتراک
+        <select name="panel_provider" id="setup-panel-provider" required>
+          <option value="pasarguard" {% if (values.PANEL_PROVIDER or 'pasarguard') == 'pasarguard' %}selected{% endif %}>PasarGuard</option>
+          <option value="goguard" {% if values.PANEL_PROVIDER == 'goguard' %}selected{% endif %}>SolidLayer / GoGuard</option>
+        </select>
+        <small class="muted">اطلاعات اتصال هر دو پنل جداگانه ذخیره می‌شوند؛ عملیات اشتراک از پنل فعال انجام می‌شود.</small>
+      </label>
+      <div data-panel-provider-fields="pasarguard">
       <label>آدرس پاسارگارد (PG_BASE_URL)
-        
         <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com:8443/base" />
-        <small class="muted">با پورت و path وارد کنید — مثال: <code dir="ltr">https://panel.example.com:8443/base</code></small>
-        <small class="muted">ریشه API — نه مسیر داشبورد (<code dir="ltr">/MrClock</code>)</small>
+        <small class="muted">با پورت و path وارد کنید؛ ریشه API، نه مسیر داشبورد.</small>
       </label>
       <label>مسیر سابسکریپشن
         <input name="pg_subscription_path" value="{{ values.PG_SUBSCRIPTION_PATH or '/sub' }}" dir="ltr" placeholder="/sub/" maxlength="128" autocomplete="off" />
-        <small class="muted">فقط مسیر لینک اشتراک؛ مثل <code dir="ltr">/sub/</code> یا <code dir="ltr">/apilog/</code>، بدون دامنه و توکن.</small>
+        <small class="muted">فقط مسیر لینک اشتراک؛ مثل <code dir="ltr">/sub/</code> یا <code dir="ltr">/apilog/</code>.</small>
       </label>
       <label>نام کاربری پاسارگارد
-        
         <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" placeholder="pg_user" autocomplete="off" />
         <small class="muted">یوزر همان ادمین متصل در پاسارگارد (لزوماً owner نیست)</small>
       </label>
@@ -131,6 +136,31 @@
         </span>
       </label>
       {% endif %}
+      </div>
+      <div data-panel-provider-fields="goguard" hidden>
+        <label>آدرس API پنل SolidLayer / GoGuard
+          <input name="goguard_base_url" value="{{ values.GOGUARD_BASE_URL or '' }}" dir="ltr" placeholder="https://app.solidlayerco.com" autocomplete="off" required />
+          <small class="muted">ریشه API را وارد کنید؛ نه آدرس مستندات <code dir="ltr">/docs/index.html</code>.</small>
+        </label>
+        <label>نام کاربری GoGuard
+          <input name="goguard_username" value="{{ values.GOGUARD_USERNAME or '' }}" dir="ltr" autocomplete="off" placeholder="admin" />
+        </label>
+        <label>رمز عبور GoGuard (اختیاری در صورت استفاده از کلید API)
+          <input name="goguard_password" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا رمز فعلی حفظ شود' if has_goguard_password else '' }}" />
+          {% if has_goguard_password %}<small class="muted">رمز قبلاً ذخیره شده؛ برای حفظ آن خالی بگذارید.</small>{% else %}<small class="muted">برای ورود با نام کاربری و رمز استفاده می‌شود.</small>{% endif %}
+        </label>
+        <label>کلید API اختصاصی GoGuard (X-API-Key)
+          <input name="goguard_api_key" type="password" value="" dir="ltr" autocomplete="new-password" placeholder="{{ 'خالی بماند تا کلید فعلی حفظ شود' if has_goguard_api_key else 'کلید API پنل GoGuard' }}" />
+          {% if has_goguard_api_key %}<small class="muted">کلید فعلی محفوظ است؛ برای تغییر مقدار جدید وارد کنید.</small>{% else %}<small class="muted">به‌جای ورود با رمز می‌توان از کلید API پنل GoGuard استفاده کرد.</small>{% endif %}
+        </label>
+        {% if has_goguard_api_key %}
+        <label><span class="ui-check">
+          <input type="checkbox" name="clear_goguard_api_key" value="1" />
+          حذف کلید GoGuard و استفاده از ورود با رمز
+        </span></label>
+        {% endif %}
+        <p class="muted">در GoGuard شناسه‌های سرویس برای اختصاص اشتراک استفاده می‌شوند. مدیریت سرویس‌ها و قالب‌های ساخت کاربر در پنل اصلی انجام می‌شود.</p>
+      </div>
       <label>پورت وب‌پنل (WEB_PORT)
         <input name="web_port" value="{{ values.WEB_PORT or '9000' }}" required dir="ltr" />
       </label>
@@ -149,7 +179,7 @@
     {# —— Step 4: Done —— #}
     <div class="auth-form auth-form--card setup-step" data-step="4" hidden>
       <h2 class="setup-title">۴ · سطح دسترسی</h2>
-      <p class="muted setup-lead">خلاصه نقش پاسارگارد برای این نصب — منوها از همین سطح زنده می‌آیند.</p>
+      <p class="muted setup-lead">{% if values.PANEL_PROVIDER == 'goguard' %}خلاصه دسترسی SolidLayer / GoGuard برای این نصب.{% else %}خلاصه نقش پاسارگارد برای این نصب — منوها از همین سطح زنده می‌آیند.{% endif %}</p>
       {% if pg_audit is defined and pg_audit and pg_audit.ok %}
       <div class="setup-audit">
         <div class="setup-audit-head">
@@ -163,7 +193,7 @@
         </div>
         {% if pg_audit.features %}
         <div class="setup-audit-block">
-          <small class="muted">منوی پاسارگارد</small>
+          <small class="muted">منوی پنل فعال</small>
           <div class="setup-audit-chips">
             {% for feat in pg_audit.features %}
             <span class="identity-chip">{{ feat.label }}</span>
@@ -171,7 +201,7 @@
           </div>
         </div>
         {% else %}
-        <p class="muted setup-audit-empty">هیچ بخش پاسارگارد برای این نقش فعال نیست.</p>
+        <p class="muted setup-audit-empty">هیچ بخش قابل‌نمایشی برای این نقش فعال نیست.</p>
         {% endif %}
         {% if pg_audit.limits %}
         <div class="home-panel-grid setup-audit-limits">
@@ -234,12 +264,15 @@
   if (step > 4) step = 4;
   const hasBotToken = {{ 'true' if has_bot_token else 'false' }};
   const hasPgPassword = {{ 'true' if has_pg_password else 'false' }};
+  const hasPgApiKey = {{ 'true' if has_pg_api_key else 'false' }};
+  const hasGoGuardPassword = {{ 'true' if has_goguard_password else 'false' }};
+  const hasGoGuardApiKey = {{ 'true' if has_goguard_api_key else 'false' }};
 
   const captions = {
     0: 'راه‌اندازی اولیه پنل',
     1: 'حساب مدیر وب‌پنل',
     2: 'اتصال ربات تلگرام',
-    3: 'پاسارگارد و تنظیمات وب',
+    3: 'اتصال پنل و تنظیمات وب',
     4: 'خلاصه دسترسی و ورود'
   };
 
@@ -350,20 +383,40 @@
   const otherForm = document.querySelector('form[data-step="3"]');
   if (otherForm) {
     otherForm.addEventListener('submit', (e) => {
-      if (!filled(otherForm.pg_base_url)) {
-        e.preventDefault();
-        showErr('آدرس پاسارگارد الزامی است.');
-        return;
-      }
-      if (!filled(otherForm.pg_username)) {
-        e.preventDefault();
-        showErr('نام کاربری پاسارگارد را وارد کنید.');
-        return;
-      }
-      if (!filled(otherForm.pg_password) && !hasPgPassword) {
-        e.preventDefault();
-        showErr('رمز پاسارگارد را وارد کنید.');
-        return;
+      const provider = otherForm.elements['panel_provider']?.value || 'pasarguard';
+      if (provider === 'goguard') {
+        const gUrl = otherForm.elements['goguard_base_url'];
+        const gUser = otherForm.elements['goguard_username'];
+        const gPassword = otherForm.elements['goguard_password'];
+        const gKey = otherForm.elements['goguard_api_key'];
+        if (!filled(gUrl)) {
+          e.preventDefault();
+          showErr('آدرس API پنل GoGuard الزامی است.');
+          return;
+        }
+        const clearSavedGoGuardKey = !!otherForm.elements['clear_goguard_api_key']?.checked;
+        if (!filled(gKey) && (!hasGoGuardApiKey || clearSavedGoGuardKey) && !(filled(gUser) && (filled(gPassword) || hasGoGuardPassword))) {
+          e.preventDefault();
+          showErr('کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.');
+          return;
+        }
+      } else {
+        if (!filled(otherForm.pg_base_url)) {
+          e.preventDefault();
+          showErr('آدرس پاسارگارد الزامی است.');
+          return;
+        }
+        if (!filled(otherForm.pg_username)) {
+          e.preventDefault();
+          showErr('نام کاربری پاسارگارد را وارد کنید.');
+          return;
+        }
+        if (!filled(otherForm.pg_password) && !hasPgPassword &&
+            !filled(otherForm.pg_api_key) && !hasPgApiKey) {
+          e.preventDefault();
+          showErr('رمز یا کلید API پاسارگارد الزامی است.');
+          return;
+        }
       }
       if (!filled(otherForm.web_port)) {
         e.preventDefault();
@@ -532,6 +585,27 @@
   }
 
   showStep(step);
+})();
+</script>
+<script>
+(function(){
+  const select = document.getElementById('setup-panel-provider');
+  if (!select) return;
+  const sections = document.querySelectorAll('[data-panel-provider-fields]');
+  function sync(){
+    const mode = select.value === 'goguard' ? 'goguard' : 'pasarguard';
+    sections.forEach((section) => {
+      const active = section.getAttribute('data-panel-provider-fields') === mode;
+      section.hidden = !active;
+      section.querySelectorAll('input,select,textarea').forEach((field) => {
+        if (!field.dataset.panelRequired) field.dataset.panelRequired = field.required ? '1' : '0';
+        field.disabled = !active;
+        field.required = active && field.dataset.panelRequired === '1';
+      });
+    });
+  }
+  select.addEventListener('change', sync);
+  sync();
 })();
 </script>
 {% endblock %}

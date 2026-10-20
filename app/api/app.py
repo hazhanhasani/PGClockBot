@@ -133,6 +133,7 @@ templates.env.filters["expire"] = format_expire_short
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
+templates.env.globals["active_panel_provider"] = lambda: get_settings().panel_provider
 templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
@@ -1629,6 +1630,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
         has_pg_password = bool((values.get("PG_PASSWORD") or "").strip())
         has_pg_api_key = bool((values.get("PG_API_KEY") or "").strip())
+        has_goguard_password = bool((values.get("GOGUARD_PASSWORD") or "").strip())
+        has_goguard_api_key = bool((values.get("GOGUARD_API_KEY") or "").strip())
         # Never echo live secrets back into the HTML source — a re-run of the
         # wizard (e.g. to change one unrelated field) must not require
         # re-typing the bot token / PG password, but it also must not leak
@@ -1638,6 +1641,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         display_values["BOT_TOKEN"] = ""
         display_values["PG_PASSWORD"] = ""
         display_values["PG_API_KEY"] = ""
+        display_values["GOGUARD_PASSWORD"] = ""
+        display_values["GOGUARD_API_KEY"] = ""
         if pg_audit is None and (show_done or step >= 4):
             try:
                 pg_audit = await setup_pg_access_audit()
@@ -1651,6 +1656,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "has_bot_token": has_bot_token,
                 "has_pg_password": has_pg_password,
                 "has_pg_api_key": has_pg_api_key,
+                "has_goguard_password": has_goguard_password,
+                "has_goguard_api_key": has_goguard_api_key,
                 "initial_step": step,
                 "show_done": show_done,
                 "flash_err": err or request.query_params.get("err"),
@@ -1750,12 +1757,18 @@ def create_api_app(lifespan=None) -> FastAPI:
     @app.post("/setup/other")
     async def setup_other(
         request: Request,
-        pg_base_url: str = Form(...),
+        panel_provider: str = Form("pasarguard"),
+        pg_base_url: str = Form(""),
         pg_subscription_path: str = Form("/sub"),
         pg_username: str = Form(""),
         pg_password: str = Form(""),
         pg_api_key: str = Form(""),
         clear_pg_api_key: str = Form(""),
+        goguard_base_url: str = Form(""),
+        goguard_username: str = Form(""),
+        goguard_password: str = Form(""),
+        goguard_api_key: str = Form(""),
+        clear_goguard_api_key: str = Form(""),
         web_port: str = Form("9000"),
         public_base_url: str = Form(""),
         currency: str = Form("تومان"),
@@ -1770,6 +1783,70 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return JSONResponse({"ok": False, "error": "راه‌اندازی قبلاً کامل شده است"}, status_code=400)
             return RedirectResponse("/", status_code=303)
         begin_setup()
+        provider = (panel_provider or "pasarguard").strip().lower()
+        if provider in {"solidlayer", "solid-layer", "go_guard"}:
+            provider = "goguard"
+        if provider not in {"pasarguard", "goguard"}:
+            return await fail("نوع پنل نامعتبر است")
+
+        if provider == "goguard":
+            current_vals = current_setup_values()
+            base = normalize_pg_base_url(
+                (goguard_base_url or current_vals.get("GOGUARD_BASE_URL") or "").strip()
+            )
+            if not base:
+                return await fail("آدرس API پنل SolidLayer / GoGuard الزامی است.")
+            try:
+                base = await asyncio.to_thread(assert_safe_pg_base_url, base)
+            except UnsafePgUrlError as exc:
+                return await fail(str(exc))
+            gg_user = (goguard_username or current_vals.get("GOGUARD_USERNAME") or "").strip()
+            gg_pass = (goguard_password or current_vals.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
+            clear_gg_key = str(clear_goguard_api_key or "").strip().lower() in {"1", "on", "true", "yes"}
+            gg_key = "" if clear_gg_key else (goguard_api_key or current_vals.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            if not gg_key and not (gg_user and gg_pass):
+                return await fail("کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.")
+            port = (web_port or "9000").strip()
+            try:
+                port_n = int(port)
+                if port_n < 1 or port_n > 65535:
+                    raise ValueError
+            except ValueError:
+                return await fail("پورت وب نامعتبر است.")
+            from app.services.goguard import GoGuardClient
+            probe = GoGuardClient(username=gg_user or None, password=gg_pass or None, api_key=gg_key or None, base_url=base)
+            try:
+                await asyncio.wait_for(probe.ensure_token(), timeout=8.0)
+                admin = await asyncio.wait_for(probe.get_current_admin(), timeout=8.0)
+                if not admin:
+                    return await fail("ورود موفق بود اما پروفایل ادمین GoGuard دریافت نشد.")
+            except Exception:
+                return await fail("اتصال SolidLayer / GoGuard ناموفق بود؛ آدرس، نام کاربری و رمز را بررسی کنید.")
+            finally:
+                await probe.close()
+            ensure_web_secret()
+            pub = (public_base_url or "").strip().rstrip("/")
+            if pub.startswith("https://"):
+                pub = "http://" + pub[len("https://"):]
+            update_env_keys({
+                "PANEL_PROVIDER": "goguard",
+                "GOGUARD_BASE_URL": base,
+                "GOGUARD_USERNAME": gg_user,
+                "GOGUARD_PASSWORD": gg_pass,
+                "GOGUARD_API_KEY": gg_key,
+                "WEB_PORT": str(port_n),
+                "PUBLIC_BASE_URL": pub,
+                "CURRENCY": (currency or "").strip() or "تومان",
+            })
+            get_settings.cache_clear()
+            from app.services.pasarguard import reset_pg
+            from app.services.pg_access import clear_platform_pg_capability_cache
+            reset_pg()
+            clear_platform_pg_capability_cache()
+            if _setup_wants_json(request):
+                return JSONResponse({"ok": True, "next": "/setup?step=4"})
+            return RedirectResponse("/setup?step=4", status_code=303)
+
         try:
             sub_path = normalize_pg_subscription_path(pg_subscription_path)
         except ValueError as exc:
@@ -1846,6 +1923,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if pub.startswith("https://"):
             pub = "http://" + pub[len("https://") :]
         env_update: dict[str, str | int | None] = {
+            "PANEL_PROVIDER": "pasarguard",
             "PG_BASE_URL": base,
             "PG_SUBSCRIPTION_PATH": sub_path,
             "PG_USERNAME": (pg_username or "").strip(),
@@ -1856,6 +1934,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             "CURRENCY": (currency or "").strip() or "تومان",
         }
         update_env_keys(env_update)
+        get_settings.cache_clear()
+        from app.services.pasarguard import reset_pg
+        reset_pg()
         clear_platform_pg_capability_cache()
         if _setup_wants_json(request):
             return JSONResponse({"ok": True, "next": "/setup?step=4"})
@@ -4667,53 +4748,129 @@ def create_api_app(lifespan=None) -> FastAPI:
             token = str(form.get("BOT_TOKEN") or "").strip()
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
             ids_raw = str(form.get("ADMIN_IDS") or "").strip()
-            pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
-            if pg_base:
-                try:
-                    pg_base = await asyncio.to_thread(assert_safe_pg_base_url, pg_base)
-                except UnsafePgUrlError as exc:
-                    return _bot_err(str(exc))
-            pg_user = str(form.get("PG_USERNAME") or "").strip()
-            pg_pass = str(form.get("PG_PASSWORD") or "").strip()
-            clear_pg_key = str(form.get("clear_pg_api_key") or "").strip().lower() in {
-                "1", "on", "true", "yes",
-            }
-            pg_api_key_raw = str(form.get("PG_API_KEY") or "").replace("\r", "").strip()
+            current = current_setup_values()
+            panel_provider = str(form.get("PANEL_PROVIDER") or current.get("PANEL_PROVIDER") or "pasarguard").strip().lower()
+            if panel_provider in {"solidlayer", "solid-layer", "go_guard"}:
+                panel_provider = "goguard"
+            if panel_provider not in {"pasarguard", "goguard"}:
+                return _bot_err("نوع پنل نامعتبر است")
+
+            # Until plans/services have permanent per-provider affinity, never
+            # redirect existing panel IDs to a different backend. ID collisions
+            # could renew, revoke, or delete an unrelated user's subscription.
+            previous_provider = str(current.get("PANEL_PROVIDER") or "pasarguard").strip().lower()
+            if previous_provider in {"solidlayer", "solid-layer", "go_guard"}:
+                previous_provider = "goguard"
+            if panel_provider != previous_provider:
+                from app.db.models import UserService
+
+                async with SessionLocal() as db_session:
+                    active_service = await db_session.scalar(
+                        select(UserService.id).where(
+                            UserService.pg_user_id.is_not(None),
+                            UserService.is_cancelled.is_(False),
+                        ).limit(1)
+                    )
+                    unsettled_order = await db_session.scalar(
+                        select(Order.id).where(
+                            Order.status.in_([
+                                OrderStatus.PAID.value,
+                                OrderStatus.DELIVERING.value,
+                            ])
+                        ).limit(1)
+                    )
+                if active_service is not None or unsettled_order is not None:
+                    return _bot_err(
+                        "تغییر پنل فعال با سرویس‌های موجود یا سفارش‌های تحویل‌نشده مجاز نیست؛ "
+                        "شناسه‌های اشتراک ممکن است بین PasarGuard و GoGuard یکسان باشند. "
+                        "برای مهاجرت، ابتدا سرویس‌ها و سفارش‌ها باید به پنل مقصد نگاشت شوند."
+                    )
+
             update_mode_raw = str(form.get("BOT_UPDATE_MODE") or "").strip().lower()
             webhook_url_raw = str(form.get("WEBHOOK_URL") or "").strip()
             webhook_path_raw = str(form.get("WEBHOOK_PATH") or "").strip()
-            current = current_setup_values()
             # Web/public fields live on panel «عمومی» — keep current values here.
             web_port = str(current.get("WEB_PORT") or "9000").strip()
             public_base = str(current.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
             currency = str(current.get("CURRENCY") or "تومان").strip() or "تومان"
-            try:
-                pg_sub_path = normalize_pg_subscription_path(
-                    str(form.get("PG_SUBSCRIPTION_PATH") or current.get("PG_SUBSCRIPTION_PATH") or "/sub")
-                )
-            except ValueError as exc:
-                return _bot_err(str(exc))
+
+            goguard_base = normalize_pg_base_url(str(form.get("GOGUARD_BASE_URL") or current.get("GOGUARD_BASE_URL") or "").strip())
+            goguard_user = str(form.get("GOGUARD_USERNAME") or current.get("GOGUARD_USERNAME") or "").strip()
+            goguard_pass = str(form.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip() or str(current.get("GOGUARD_PASSWORD") or "").replace("\r", "").strip()
+            clear_goguard_key = str(form.get("clear_goguard_api_key") or "").strip().lower() in {"1", "on", "true", "yes"}
+            goguard_key = "" if clear_goguard_key else (
+                str(form.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+                or str(current.get("GOGUARD_API_KEY") or "").replace("\r", "").strip()
+            )
+
+            pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
+            pg_user = str(form.get("PG_USERNAME") or "").strip()
+            pg_pass = str(form.get("PG_PASSWORD") or "").replace("\r", "").strip()
+            clear_pg_key = str(form.get("clear_pg_api_key") or "").strip().lower() in {
+                "1", "on", "true", "yes",
+            }
+            pg_api_key_raw = str(form.get("PG_API_KEY") or "").replace("\r", "").strip()
+            if panel_provider == "pasarguard":
+                if pg_base:
+                    try:
+                        pg_base = await asyncio.to_thread(assert_safe_pg_base_url, pg_base)
+                    except UnsafePgUrlError as exc:
+                        return _bot_err(str(exc))
+                if not pg_pass:
+                    pg_pass = (current.get("PG_PASSWORD") or "").strip()
+                if clear_pg_key:
+                    pg_api_key = ""
+                elif pg_api_key_raw:
+                    if len(pg_api_key_raw) < 16:
+                        return _bot_err(
+                            "کلید API پاسارگارد کوتاه است — مقدار کامل را از پنل پاسارگارد کپی کنید"
+                        )
+                    pg_api_key = pg_api_key_raw
+                else:
+                    pg_api_key = (current.get("PG_API_KEY") or "").strip()
+                if not pg_base or not pg_user or not (pg_pass or pg_api_key):
+                    return _bot_err(
+                        "برای پاسارگارد، آدرس پنل و نام کاربری به‌همراه رمز یا کلید API الزامی است"
+                    )
+                try:
+                    pg_sub_path = normalize_pg_subscription_path(
+                        str(form.get("PG_SUBSCRIPTION_PATH") or current.get("PG_SUBSCRIPTION_PATH") or "/sub")
+                    )
+                except ValueError as exc:
+                    return _bot_err(str(exc))
+            else:
+                if not goguard_base:
+                    return _bot_err("آدرس API پنل SolidLayer / GoGuard الزامی است")
+                try:
+                    goguard_base = await asyncio.to_thread(assert_safe_pg_base_url, goguard_base)
+                except UnsafePgUrlError as exc:
+                    return _bot_err(str(exc))
+                if not goguard_key and not (goguard_user and goguard_pass):
+                    return _bot_err("کلید API یا نام کاربری و رمز عبور SolidLayer / GoGuard الزامی است")
+                pg_base = normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip())
+                pg_user = str(current.get("PG_USERNAME") or "").strip()
+                pg_pass = str(current.get("PG_PASSWORD") or "").strip()
+                pg_api_key = str(current.get("PG_API_KEY") or "").strip()
+                try:
+                    pg_sub_path = normalize_pg_subscription_path(current.get("PG_SUBSCRIPTION_PATH") or "/sub")
+                except ValueError:
+                    pg_sub_path = "/sub"
+                from app.services.goguard import GoGuardClient
+                probe = GoGuardClient(username=goguard_user or None, password=goguard_pass or None, api_key=goguard_key or None, base_url=goguard_base)
+                try:
+                    await asyncio.wait_for(probe.ensure_token(), timeout=8.0)
+                    admin = await asyncio.wait_for(probe.get_current_admin(), timeout=8.0)
+                    if not admin:
+                        return _bot_err("ورود موفق بود اما پروفایل ادمین GoGuard دریافت نشد")
+                except Exception:
+                    return _bot_err("اتصال SolidLayer / GoGuard ناموفق بود؛ آدرس، نام کاربری و رمز را بررسی کنید")
+                finally:
+                    await probe.close()
+
             if not token:
                 token = (current.get("BOT_TOKEN") or "").strip()
-            if not pg_pass:
-                pg_pass = (current.get("PG_PASSWORD") or "").strip()
-            if clear_pg_key:
-                pg_api_key = ""
-            elif pg_api_key_raw:
-                if len(pg_api_key_raw) < 16:
-                    return _bot_err(
-                        "کلید API پاسارگارد کوتاه است — مقدار کامل را از پنل پاسارگارد کپی کنید"
-                    )
-                pg_api_key = pg_api_key_raw
-            else:
-                pg_api_key = (current.get("PG_API_KEY") or "").strip()
-            if not token or not uname or not ids_raw or not pg_base or not pg_user or not (
-                pg_pass or pg_api_key
-            ):
-                return _bot_err(
-                    "همه فیلدهای الزامی را پر کنید "
-                    "(برای پاسارگارد: نام کاربری + رمز یا کلید API)"
-                )
+            if not token or not uname or not ids_raw:
+                return _bot_err("توکن، نام کاربری ربات و آیدی ادمین‌ها الزامی هستند")
             try:
                 ids = parse_admin_ids(ids_raw)
             except ValueError:
@@ -4741,6 +4898,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "BOT_TOKEN": token,
                 "BOT_USERNAME": uname,
                 "ADMIN_IDS": admin_ids_norm,
+                "PANEL_PROVIDER": panel_provider,
+                "GOGUARD_BASE_URL": goguard_base,
+                "GOGUARD_USERNAME": goguard_user,
+                "GOGUARD_PASSWORD": goguard_pass,
+                "GOGUARD_API_KEY": goguard_key,
                 "PG_BASE_URL": pg_base,
                 "PG_SUBSCRIPTION_PATH": pg_sub_path,
                 "PG_USERNAME": pg_user,
@@ -4762,6 +4924,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "BOT_TOKEN": str(current.get("BOT_TOKEN") or "").strip(),
                 "BOT_USERNAME": str(current.get("BOT_USERNAME") or "").strip().lstrip("@"),
                 "ADMIN_IDS": current_admin_ids,
+                "PANEL_PROVIDER": str(current.get("PANEL_PROVIDER") or "pasarguard").strip().lower(),
+                "GOGUARD_BASE_URL": normalize_pg_base_url(str(current.get("GOGUARD_BASE_URL") or "").strip()),
+                "GOGUARD_USERNAME": str(current.get("GOGUARD_USERNAME") or "").strip(),
+                "GOGUARD_PASSWORD": str(current.get("GOGUARD_PASSWORD") or "").strip(),
+                "GOGUARD_API_KEY": str(current.get("GOGUARD_API_KEY") or "").strip(),
                 "PG_BASE_URL": normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip()),
                 "PG_SUBSCRIPTION_PATH": normalize_pg_subscription_path(current.get("PG_SUBSCRIPTION_PATH")),
                 "PG_USERNAME": str(current.get("PG_USERNAME") or "").strip(),

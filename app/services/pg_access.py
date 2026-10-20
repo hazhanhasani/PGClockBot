@@ -185,10 +185,16 @@ async def resolve_platform_pg_capabilities(
     from app.services.pasarguard import PasarGuardClient, PasarGuardError
 
     settings = get_settings()
-    env_username = getattr(settings, "pg_username", None)
-    env_password = getattr(settings, "pg_password", None)
-    env_api_key = getattr(settings, "pg_api_key", None)
-    env_base_url = getattr(settings, "pg_base_url", None)
+    if getattr(settings, "panel_provider", "pasarguard") == "goguard":
+        env_username = getattr(settings, "goguard_username", None)
+        env_password = getattr(settings, "goguard_password", None)
+        env_api_key = getattr(settings, "goguard_api_key", None)
+        env_base_url = getattr(settings, "goguard_base_url", None)
+    else:
+        env_username = getattr(settings, "pg_username", None)
+        env_password = getattr(settings, "pg_password", None)
+        env_api_key = getattr(settings, "pg_api_key", None)
+        env_base_url = getattr(settings, "pg_base_url", None)
     uname = (username if username is not None else env_username or "").strip()
     pwd = (password if password is not None else (env_password or "")).replace(
         "\r", ""
@@ -197,7 +203,7 @@ async def resolve_platform_pg_capabilities(
         "\r", ""
     ).strip()
     # base_url override only for setup probe (temporary client)
-    cache_key = f"{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
+    cache_key = f"{settings.panel_provider}|{(base_url or env_base_url or '').rstrip('/')}|{uname.lower()}"
     now = time.monotonic()
     if (
         use_cache
@@ -220,8 +226,12 @@ async def resolve_platform_pg_capabilities(
         "role": None,
         "admin": None,
     }
-    if not uname or not (pwd or key):
-        empty["error"] = "اعتبارنامه پاسارگارد ناقص است (نام کاربری + رمز یا کلید API)"
+    if settings.panel_provider == "goguard":
+        if not key and not (uname and pwd):
+            empty["error"] = "GoGuard به کلید API یا نام کاربری و رمز عبور نیاز دارد"
+            return empty
+    elif not uname or not (pwd or key):
+        empty["error"] = "اعتبارنامه پنل ناقص است (نام کاربری + رمز یا کلید API)"
         return empty
 
     client: PasarGuardClient | None = None
@@ -233,13 +243,23 @@ async def resolve_platform_pg_capabilities(
     )
     try:
         if own_client:
-            # Temporary client for setup probe — do not touch global get_pg() singleton.
-            # Prefer API key when provided; otherwise password grant.
-            client = PasarGuardClient(
-                username=uname,
-                password=pwd or None,
-                api_key=key or None,
-            )
+            # Temporary client for setup probe — do not touch the global singleton.
+            if settings.panel_provider == "goguard":
+                from app.services.goguard import GoGuardClient
+
+                client = GoGuardClient(
+                    username=uname or None,
+                    password=pwd or None,
+                    api_key=key or None,
+                    base_url=base_url or settings.goguard_base_url,
+                )
+            else:
+                # Prefer API key when provided; otherwise password grant.
+                client = PasarGuardClient(
+                    username=uname,
+                    password=pwd or None,
+                    api_key=key or None,
+                )
             if base_url:
                 try:
                     client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"), resolve_dns=False)
@@ -265,6 +285,45 @@ async def resolve_platform_pg_capabilities(
             client = get_pg()
 
         await client.ensure_token()
+        if settings.panel_provider == "goguard":
+            admin = await client.get_current_admin()
+            if not isinstance(admin, dict) or not admin:
+                raise PasarGuardError("GoGuard current-admin endpoint returned no profile")
+            role_name = str(admin.get("role_name") or "").strip().lower()
+            goguard_role = {
+                "id": None,
+                "name": role_name or "seller",
+                # GoGuard owner is not a PasarGuard owner: never grant unsupported
+                # Host/Node/template/admin mutations through the compatibility layer.
+                "is_owner": False,
+                "permissions": {
+                    "system": {"read": True},
+                    "users": {
+                        "read": True, "read_simple": True, "create": True,
+                        "update": True, "delete": True, "reset_usage": True,
+                        "revoke_sub": True,
+                    },
+                    "groups": {"read": True, "read_simple": True},
+                },
+                "limits": (admin.get("role") or {}).get("limits", {})
+                if isinstance(admin.get("role"), dict) else {},
+            }
+            payload = {
+                "ok": True,
+                "error": None,
+                "provider": "goguard",
+                "username": str(admin.get("username") or uname),
+                "pg_is_owner": role_name == "owner",
+                "goguard_is_owner": role_name == "owner",
+                "pg_role_id": None,
+                "features": ["pg_overview", "pg_users", "pg_groups"],
+                "role": goguard_role,
+                "admin": admin,
+            }
+            if use_cache and not own_client:
+                _PLATFORM_CAPS_CACHE[cache_key] = (now, dict(payload))
+            return payload
+
         # Token success already proves the account exists. Directory lookup
         # (GET /api/admins, /api/admin/{id}) often 403s for roles that only
         # have users.create — use GET /api/admin (self) first, then directory,
@@ -584,18 +643,26 @@ def staff_from_platform_caps(caps: Mapping[str, Any] | None) -> dict[str, Any]:
     """
     caps = caps or {}
     role = caps.get("role") if isinstance(caps.get("role"), dict) else None
+    provider = str(caps.get("provider") or "pasarguard").strip().lower()
     features = list(caps.get("features") or [])
     pg_is_owner = bool(caps.get("pg_is_owner"))
-    if pg_is_owner:
+    if pg_is_owner and provider != "goguard":
         features = full_pg_owner_features()
         role = dict(role or {})
         role["is_owner"] = True
+    elif provider == "goguard" and isinstance(role, dict):
+        # GoGuard owners retain global subscription scope, but the compatibility
+        # layer only exposes operations supported by the GoGuard API.
+        role = dict(role)
+        role["is_owner"] = False
     staff = enrich_staff_pg_from_role(
         {"role": "admin", "pg_is_owner": pg_is_owner},
         features,
         role,
     )
     staff["pg_is_owner"] = pg_is_owner
+    staff["pg_provider"] = provider
+    staff["goguard_is_owner"] = bool(caps.get("goguard_is_owner"))
     if caps.get("username"):
         staff["pg_admin_username"] = caps["username"]
     if caps.get("pg_role_id") is not None:
@@ -628,7 +695,10 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
 
     staff = staff_from_platform_caps(caps)
     pg_is_owner = bool(staff.get("pg_is_owner"))
-    can_create = pg_is_owner or staff_has_pg_admins_create(staff)
+    provider = str(caps.get("provider") or "pasarguard").strip().lower()
+    can_create = False if provider == "goguard" else (
+        pg_is_owner or staff_has_pg_admins_create(staff)
+    )
     role = staff.get("pg_role") if isinstance(staff.get("pg_role"), dict) else None
     admin = caps.get("admin") if isinstance(caps.get("admin"), dict) else None
     role_name = None
@@ -643,7 +713,7 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         if k in PG_FEATURE_LABELS
     ]
     limits_rows: list[dict[str, str]] = []
-    if pg_is_owner:
+    if pg_is_owner and provider != "goguard":
         limits_rows.append({"label": "سقف نقش", "value": "بدون محدودیت (مالک پاسارگارد)"})
     else:
         merged = merge_role_limits(admin, role)
@@ -691,7 +761,9 @@ def public_pg_access_audit(caps: Mapping[str, Any] | None) -> dict[str, Any]:
         "username": username,
         "role_name": role_name,
         "account_label": (
-            "مالک کامل پاسارگارد" if pg_is_owner else "حساب محدود پاسارگارد"
+            ("مالک SolidLayer / GoGuard" if caps.get("goguard_is_owner") else "ادمین SolidLayer / GoGuard")
+            if provider == "goguard"
+            else ("مالک کامل پاسارگارد" if pg_is_owner else "حساب محدود پاسارگارد")
         ),
         "features": features,
         "can_create_admin": can_create,

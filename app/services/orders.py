@@ -657,8 +657,13 @@ async def create_custom_order(
         price_per_gb=price_per_gb,
         price_per_day=price_per_day,
     )
+    from app.config import get_settings
+
+    is_goguard = get_settings().panel_provider == "goguard"
     tpl_raw = (ui.get("custom_plan_template_id") or "").strip()
     tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+    if is_goguard:
+        tpl_id = None
     group_ids = (ui.get("custom_plan_group_ids") or "").strip() or None
     name_prefix = (ui.get("custom_plan_username_prefix") or "").strip() or None
     name_suffix = (ui.get("custom_plan_username_suffix") or "").strip() or None
@@ -687,13 +692,18 @@ async def create_custom_order(
         tpl_raw = own_map.get("custom_plan_template_id") or ""
         group_ids = own_map.get("custom_plan_group_ids") or None
         tpl_id = int(tpl_raw) if tpl_raw.isdigit() else None
+        if is_goguard:
+            tpl_id = None
         name_prefix = own_map.get("custom_plan_username_prefix") or None
         name_suffix = own_map.get("custom_plan_username_suffix") or None
         name_pattern = own_map.get("custom_plan_username_pattern") or None
-        if not tpl_id and not group_ids:
+        if not is_goguard and not tpl_id and not group_ids:
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+
+    if is_goguard and not group_ids:
+        raise ValueError("برای پلن دلخواه در GoGuard، حداقل یک سرویس GoGuard را در تنظیمات فروشگاه انتخاب کنید")
 
     plan = Plan(
         name="پلن دلخواه",
@@ -2046,6 +2056,9 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg = get_pg()
         qty = order_quantity(order)
 
+        from app.config import get_settings
+
+        use_template = bool(plan.pg_template_id) and get_settings().panel_provider != "goguard"
         pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
         data_limit = None
         expire = None
@@ -2065,7 +2078,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     pg_role_id=pg_role_id,
                     data_limit=data_limit,
                     expire_ts=expire,
-                    from_template=bool(plan.pg_template_id),
+                    from_template=use_template,
                     quantity=qty,
                 )
             except ProvisionError as e:
@@ -2074,11 +2087,12 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         from app.services.pasarguard import build_user_create_payload, parse_group_ids
 
         group_ids = None
-        if not plan.pg_template_id:
+        if not use_template:
             group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
             if not group_ids:
+                provider_hint = "سرویس GoGuard" if get_settings().panel_provider == "goguard" else "گروه پاسارگارد"
                 raise ValueError(
-                    "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
+                    f"هیچ {provider_hint} برای ساخت کاربر انتخاب نشده — برای پلن، حداقل یک سرویس/گروه انتخاب کنید"
                 )
 
         created_pg_ids: list[int] = []
@@ -2097,7 +2111,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             note = f"PGClockBot order #{order.id}"
             if qty > 1:
                 note = f"{note} ({index}/{qty})"
-            if plan.pg_template_id:
+            if use_template:
                 payload = {
                     "username": username,
                     "user_template_id": plan.pg_template_id,
@@ -2411,6 +2425,9 @@ async def _assert_renewal_provision_gate(
         return
     pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
     try:
+        from app.config import get_settings
+
+        use_template = bool(plan.pg_template_id) and get_settings().panel_provider != "goguard"
         await assert_provision_renew(
             session,
             reseller_user_id=int(order.reseller_id),
@@ -2418,7 +2435,7 @@ async def _assert_renewal_provision_gate(
             pg_role_id=pg_role_id,
             data_limit=data_limit,
             expire_ts=gate_expire,
-            from_template=bool(plan.pg_template_id) if run.snapshot is None else False,
+            from_template=use_template if run.snapshot is None else False,
         )
     except ProvisionError as e:
         raise ValueError(e.message) from e
@@ -2474,11 +2491,19 @@ async def _write_renewal_target(
 
 
 async def _write_legacy_renewal(pg, service: UserService, plan: Plan, *, data_limit: int | None, expire: int | None):
-    if plan.pg_template_id:
+    from app.config import get_settings
+
+    if plan.pg_template_id and get_settings().panel_provider != "goguard":
         return await pg.modify_user_with_template(service.pg_user_id, {"user_template_id": plan.pg_template_id})
-    return await pg.modify_user_by_id(
-        service.pg_user_id, {"status": "active", "data_limit": data_limit, "expire": expire},
-    )
+    payload = {"status": "active", "data_limit": data_limit, "expire": expire}
+    if get_settings().panel_provider == "goguard":
+        from app.services.pasarguard import parse_group_ids
+
+        service_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
+        if not service_ids:
+            raise ValueError("برای تمدید در GoGuard، حداقل یک سرویس در پلن انتخاب کنید")
+        payload["group_ids"] = service_ids
+    return await pg.modify_user_by_id(service.pg_user_id, payload)
 
 
 def _record_renewed_service(
