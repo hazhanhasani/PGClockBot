@@ -55,6 +55,12 @@ def staff_can_manage_representatives(staff: Mapping[str, Any] | None) -> bool:
     """Owner with PG admin-create, or active Representative with real ``admins.create``."""
     if not staff:
         return False
+    # GoGuard provides no create-admin endpoint; never infer an equivalent
+    # privilege from a cached PasarGuard permission or a local Owner role.
+    from app.config import get_settings
+
+    if get_settings().panel_provider == "goguard":
+        return False
     if staff_is_sub_representative(staff):
         return False
     if is_explicit_owner_staff(staff):
