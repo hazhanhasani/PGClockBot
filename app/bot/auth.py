@@ -492,7 +492,10 @@ async def platform_pg_quota_staff() -> dict:
     }
 
 async def platform_can_manage_representatives() -> bool:
-    """True when the env PG account may create admins / shop representatives."""
+    """True only if the active backend actually supports admin provisioning."""
+    from app.config import get_settings
+    if get_settings().panel_provider == "goguard":
+        return False
     from app.services.pg_access import resolve_platform_pg_capabilities, staff_from_platform_caps
     from app.services.principal_provisioning import owner_has_pg_admin_create_capability
 
