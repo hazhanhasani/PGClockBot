@@ -113,7 +113,6 @@ async def _platform_admin_menu_flags(
     from app.bot.auth import (
         bot_migrated_pg_features,
         is_bot_owner_principal,
-        platform_can_manage_representatives,
     )
 
     feats: frozenset[str] = frozenset()
@@ -125,7 +124,10 @@ async def _platform_admin_menu_flags(
             feats = await bot_migrated_pg_features(
                 session, db_user, is_reseller_bot=is_reseller_bot
             )
-            can_reps = await platform_can_manage_representatives()
+            # Owner reseller directory is local data: do not hide its navigation
+            # just because GoGuard lacks the PasarGuard admins.create endpoint.
+            # Provisioning actions continue using the live capability gate.
+            can_reps = True
     except Exception:
         feats = frozenset()
         can_reps = False
