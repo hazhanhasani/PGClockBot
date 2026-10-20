@@ -35,7 +35,7 @@ MAX_BACKOFF_SECONDS = 1.0
 
 def classify_provider_failure(exc: BaseException) -> str:
     """Safe high-level diagnostic category, with no remote body leakage."""
-    if isinstance(exc, httpx.TimeoutException):
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         return "timeout"
     if isinstance(exc, RETRYABLE_NETWORK_ERRORS):
         return "network"
