@@ -88,14 +88,17 @@ async def get_reseller_panel_base_url(session: AsyncSession) -> str:
 
 
 async def get_reseller_pg_panel_base_url(session: AsyncSession) -> str:
-    """Custom PG panel URL for resellers → else exact PG_BASE_URL from settings."""
+    """Panel URL for the selected provider; never mix PG admin URLs with GoGuard."""
     from app.config import get_settings, normalize_pg_base_url
     from app.services.users import get_setting
 
+    settings = get_settings()
+    if settings.panel_provider == "goguard":
+        return normalize_pg_base_url(settings.goguard_base_url or "")
     custom = (await get_setting(session, "reseller_pg_panel_base_url") or "").strip()
     if custom:
         return normalize_pg_base_url(custom)
-    return normalize_pg_base_url(get_settings().pg_base_url or "")
+    return normalize_pg_base_url(settings.pg_base_url or "")
 
 
 def parse_perms(raw: str | None) -> list[str]:
@@ -1367,7 +1370,12 @@ async def format_reseller_access_card(session: AsyncSession, profile) -> str:
         "در ربات اصلی ادمین، پنل عملیاتی نماینده وجود ندارد.",
         "",
     ]
-    pg_u = (profile.pg_admin_username or "").strip()
+    from app.config import get_settings
+
+    # GoGuard does not support provisioning PG admin credentials. Never show
+    # the legacy PasarGuard admin as a valid GoGuard credential to shop owners.
+    show_pg_credentials = get_settings().panel_provider == "pasarguard"
+    pg_u = (profile.pg_admin_username or "").strip() if show_pg_credentials else ""
     web_u = (profile.web_username or "").strip()
     unified = bool(pg_u and web_u and pg_u.lower() == web_u.lower())
     login_url = f"{panel}/login" if panel else ""
