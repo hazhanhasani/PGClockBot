@@ -258,12 +258,15 @@
   if (step > 4) step = 4;
   const hasBotToken = {{ 'true' if has_bot_token else 'false' }};
   const hasPgPassword = {{ 'true' if has_pg_password else 'false' }};
+  const hasPgApiKey = {{ 'true' if has_pg_api_key else 'false' }};
+  const hasGoGuardPassword = {{ 'true' if has_goguard_password else 'false' }};
+  const hasGoGuardApiKey = {{ 'true' if has_goguard_api_key else 'false' }};
 
   const captions = {
     0: 'راه‌اندازی اولیه پنل',
     1: 'حساب مدیر وب‌پنل',
     2: 'اتصال ربات تلگرام',
-    3: 'پاسارگارد و تنظیمات وب',
+    3: 'اتصال پنل و تنظیمات وب',
     4: 'خلاصه دسترسی و ورود'
   };
 
@@ -374,20 +377,39 @@
   const otherForm = document.querySelector('form[data-step="3"]');
   if (otherForm) {
     otherForm.addEventListener('submit', (e) => {
-      if (!filled(otherForm.pg_base_url)) {
-        e.preventDefault();
-        showErr('آدرس پاسارگارد الزامی است.');
-        return;
-      }
-      if (!filled(otherForm.pg_username)) {
-        e.preventDefault();
-        showErr('نام کاربری پاسارگارد را وارد کنید.');
-        return;
-      }
-      if (!filled(otherForm.pg_password) && !hasPgPassword) {
-        e.preventDefault();
-        showErr('رمز پاسارگارد را وارد کنید.');
-        return;
+      const provider = otherForm.elements['panel_provider']?.value || 'pasarguard';
+      if (provider === 'goguard') {
+        const gUrl = otherForm.elements['goguard_base_url'];
+        const gUser = otherForm.elements['goguard_username'];
+        const gPassword = otherForm.elements['goguard_password'];
+        const gKey = otherForm.elements['goguard_api_key'];
+        if (!filled(gUrl)) {
+          e.preventDefault();
+          showErr('آدرس API پنل GoGuard الزامی است.');
+          return;
+        }
+        if (!filled(gKey) && !hasGoGuardApiKey && !(filled(gUser) && (filled(gPassword) || hasGoGuardPassword))) {
+          e.preventDefault();
+          showErr('کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.');
+          return;
+        }
+      } else {
+        if (!filled(otherForm.pg_base_url)) {
+          e.preventDefault();
+          showErr('آدرس پاسارگارد الزامی است.');
+          return;
+        }
+        if (!filled(otherForm.pg_username)) {
+          e.preventDefault();
+          showErr('نام کاربری پاسارگارد را وارد کنید.');
+          return;
+        }
+        if (!filled(otherForm.pg_password) && !hasPgPassword &&
+            !filled(otherForm.pg_api_key) && !hasPgApiKey) {
+          e.preventDefault();
+          showErr('رمز یا کلید API پاسارگارد الزامی است.');
+          return;
+        }
       }
       if (!filled(otherForm.web_port)) {
         e.preventDefault();
