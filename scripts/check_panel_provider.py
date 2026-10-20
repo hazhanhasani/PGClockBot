@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 # Executing "python scripts/check_panel_provider.py" sets sys.path[0] to
@@ -18,17 +19,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings
 from app.services.pasarguard import get_pg
+from app.services.panel_retry import classify_provider_failure
 
 
 async def _probe(label: str, awaitable):
+    started = time.perf_counter()
     try:
         value = await asyncio.wait_for(awaitable, timeout=20.0)
-        print(f"[OK] {label}")
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        # BluePanel Processor's service-health classification uses 3.5s and
+        # 8s thresholds. Show a diagnostic label without declaring a service
+        # unavailable because of one slow response.
+        state = "slow" if latency_ms > 8000 else "degraded" if latency_ms > 3500 else "healthy"
+        print(f"[OK] {label} ({state}; {latency_ms}ms)")
         return value
     except Exception as exc:
-        # Error body could contain an access key / subscription URL — never
-        # log exception.text, body, repr or inbound URL from remote API.
-        print(f"[FAIL] {label} ({type(exc).__name__})")
+        # Error body may contain an access key/URL — classify only.
+        category = classify_provider_failure(exc)
+        print(f"[FAIL] {label} ({category})")
         return None
 
 

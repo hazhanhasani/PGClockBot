@@ -38,6 +38,9 @@ jobs:
       - name: Ensure all install/update links target owner fork
         run: python -m pytest tests/test_fork_repository_sources.py -q -p no:cacheprovider
 
+      - name: BluePanel-inspired provider resilience and migration dry run
+        run: python -m pytest tests/test_bluepanel_worker_resilience.py tests/test_bluepanel_migration_dry_run.py -q -p no:cacheprovider
+
   # The installer runs the panel on Python 3.10–3.12: newer-only code must not ship.
   oldest-python:
     runs-on: ubuntu-latest
