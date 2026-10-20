@@ -394,7 +394,8 @@
           showErr('آدرس API پنل GoGuard الزامی است.');
           return;
         }
-        if (!filled(gKey) && !hasGoGuardApiKey && !(filled(gUser) && (filled(gPassword) || hasGoGuardPassword))) {
+        const clearSavedGoGuardKey = !!otherForm.elements['clear_goguard_api_key']?.checked;
+        if (!filled(gKey) && (!hasGoGuardApiKey || clearSavedGoGuardKey) && !(filled(gUser) && (filled(gPassword) || hasGoGuardPassword))) {
           e.preventDefault();
           showErr('کلید API یا نام کاربری و رمز عبور GoGuard الزامی است.');
           return;
