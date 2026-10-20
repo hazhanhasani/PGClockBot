@@ -394,10 +394,16 @@ class GoGuardClient(PasarGuardClient):
         cached_username = self._id_username_cache.get(uid)
         if cached_username:
             try:
-                return await self.get_user_by_username(cached_username)
+                cached_user = await self.get_user_by_username(cached_username)
+                # Usernames can be deleted/re-created with new numeric IDs.
+                # Never mutate another subscription based on a stale ID cache.
+                if _as_int(cached_user.get("id")) == uid:
+                    return cached_user
+                self._id_username_cache.pop(uid, None)
             except PasarGuardError as exc:
                 if exc.status_code != 404:
                     raise
+                self._id_username_cache.pop(uid, None)
         page, limit = 1, 100
         while page <= 1000:
             data = await self.get_users(page=page, limit=limit)
@@ -446,16 +452,18 @@ class GoGuardClient(PasarGuardClient):
         body = _build_update_payload(payload, old_username)
         if len(body) == 1:
             return current
-        data = await self.request("PUT", "/api/subscriptions", json=body)
-        updated = _one(data)
+        await self.request("PUT", "/api/subscriptions", json=body)
         new_username = str(payload.get("username") or old_username).strip()
-        if not updated:
-            return await self.get_user_by_username(new_username)
-        user = _normalize_subscription(updated)
-        if user.get("id") is not None and user.get("username"):
-            self._id_username_cache[int(user["id"])] = str(user["username"])
-        if new_username != old_username and user.get("id") is not None:
-            self._id_username_cache[int(user["id"])] = new_username
+        # Read the authoritative record after a mutation. Bulk-update responses
+        # can be wrappers/partial rows and may omit stable IDs or quota fields.
+        user = await self.get_user_by_username(new_username)
+        if _as_int(user.get("id")) != int(user_id):
+            raise PasarGuardError(
+                "GoGuard پاسخ ویرایش اشتراک با شناسهٔ دیگری برگشت؛ سفارش نیاز به بررسی دارد"
+            )
+        if new_username != old_username:
+            self._id_username_cache.pop(int(user_id), None)
+        self._id_username_cache[int(user_id)] = new_username
         return user
 
     async def modify_user_with_template(self, user_id: int, payload: dict) -> dict:
