@@ -416,11 +416,21 @@ class GoGuardClient(PasarGuardClient):
         body = _build_create_payload(payload)
         data = await self.request("POST", "/api/subscriptions", json=[body])
         created = _one(data)
-        if not created:
+        if not isinstance(created, dict):
             raise PasarGuardError("GoGuard اشتراک را ساخت اما پاسخ قابل خواندن نبود")
         user = _normalize_subscription(created)
-        if user.get("id") is not None and user.get("username"):
-            self._id_username_cache[int(user["id"])] = str(user["username"])
+        if not user.get("id") or not user.get("username"):
+            # The mutation may already have succeeded. Read by username
+            # instead of issuing another create (which could duplicate orders).
+            try:
+                user = await self.get_user_by_username(body["username"])
+            except PasarGuardError:
+                raise PasarGuardError(
+                    "GoGuard پاسخ ساخت اشتراک را بدون شناسه معتبر برگرداند؛ وضعیت سفارش نیاز به بررسی دارد"
+                ) from None
+        if not user.get("id"):
+            raise PasarGuardError("GoGuard شناسه اشتراک ساخته‌شده را برنگرداند")
+        self._id_username_cache[int(user["id"])] = str(user["username"])
         if str(payload.get("status") or "active").lower() in {"disabled", "inactive"}:
             if user.get("id") is None:
                 raise PasarGuardError("اشتراک ساخته شد اما شناسه آن برنگشت")
