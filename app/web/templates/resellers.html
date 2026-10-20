@@ -149,7 +149,7 @@
   <table class="table-compact" data-sortable{% if owner_view and can_manage_reps %} data-bulk-select{% endif %}>
     <thead>
       <tr>
-        {% if owner_view %}{{ table_select_head() }}{% endif %}
+        {% if owner_view and can_manage_reps %}{{ table_select_head() }}{% endif %}
         <th data-sort-type="text">کاربر</th>
         <th class="col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-hide-sm" data-sort-type="text">نقش</th>
@@ -167,7 +167,7 @@
     {% for u, p in rows %}
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr{% if owner_view %} data-bulk-ops="{% if can_manage_reps %}delete_reseller,delete_user{% endif %}"{% endif %}>
-        {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
+        {% if owner_view and can_manage_reps %}{{ table_select_cell(u.id) }}{% endif %}
         <td data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
