@@ -122,10 +122,13 @@ async def _platform_admin_menu_flags(
         if await is_bot_owner_principal(
             session, db_user, is_reseller_bot=is_reseller_bot
         ):
-            feats = await bot_migrated_pg_features(
-                session, db_user, is_reseller_bot=is_reseller_bot
-            )
-            can_reps = True  # owner visibility; creation is independently guarded
+            can_reps = True  # verified owner can view local shops even if panel offline
+            try:
+                feats = await bot_migrated_pg_features(
+                    session, db_user, is_reseller_bot=is_reseller_bot
+                )
+            except Exception:
+                feats = frozenset()  # do not infer PasarGuard/GoGuard permissions
     except Exception:
         feats = frozenset()
         can_reps = False
